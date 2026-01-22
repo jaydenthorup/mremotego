@@ -1,0 +1,154 @@
+# 1Password CLI Integration
+
+MremoteGO supports storing passwords in 1Password and referencing them in your config file. This is perfect for team environments where you want to share connection configurations via git without exposing passwords.
+
+## Prerequisites
+
+1. Install [1Password CLI](https://developer.1password.com/docs/cli/get-started/)
+2. Sign in to 1Password CLI: `op signin`
+3. Ensure you have items stored in 1Password vaults
+
+## Usage
+
+### Storing Passwords in 1Password
+
+Instead of entering a password directly, use a 1Password reference in this format:
+
+```
+op://vault-name/item-name/field-name
+```
+
+**Examples:**
+- `op://Private/MyServer/password` - Gets the password field from "MyServer" item in "Private" vault
+- `op://Work/Production-DB/admin-password` - Gets custom "admin-password" field
+- `op://Shared/RDP-Servers/hwb-10-password` - Team-shared password from "Shared" vault
+
+### In the GUI
+
+When adding or editing a connection:
+1. In the **Password** field, enter a 1Password reference like: `op://Private/MyServer/password`
+2. Click **Save**
+3. The reference is stored as-is in the YAML config (not encrypted)
+4. When connecting, the password is automatically retrieved from 1Password
+
+### In the Config File
+
+You can manually edit your `config.yaml` to use 1Password references:
+
+```yaml
+connections:
+  - name: Production Server
+    protocol: rdp
+    host: prod.example.com
+    username: administrator
+    password: op://Work/ProdServer/password  # 1Password reference
+    port: 3389
+```
+
+### In the CLI
+
+```bash
+# Add a connection with 1Password reference
+mremotego add "My Server" rdp server.example.com --username admin --password "op://Private/MyServer/password"
+
+# Connect (password retrieved automatically)
+mremotego connect "My Server"
+```
+
+## How It Works
+
+1. **When saving**: 1Password references (starting with `op://`) are stored as-is in the YAML file
+2. **When loading**: If 1Password CLI is available, references are automatically resolved using `op read`
+3. **Fallback**: If `op` CLI is not available or authentication fails, the connection will prompt for password
+
+## Benefits
+
+✅ **Team Sharing**: Share connection configs via git without exposing passwords
+✅ **Centralized Secrets**: All passwords stored securely in 1Password
+✅ **Audit Trail**: 1Password tracks who accessed which secrets
+✅ **Cross-Platform**: Works on Windows, Mac, and Linux
+✅ **Git-Friendly**: No merge conflicts from encrypted passwords
+
+## Password Storage Priority
+
+MremoteGO supports three password storage methods (in order of priority):
+
+1. **1Password References** (`op://...`) - Resolved from 1Password CLI
+2. **DPAPI Encrypted** (Windows) - Encrypted using Windows Data Protection API
+3. **Plain Text** (Fallback) - Stored as-is (not recommended for production)
+
+## Example Workflow
+
+### For Team Leads (Setting Up)
+
+1. Create 1Password vault for your team (e.g., "DevOps-Servers")
+2. Add server credentials as items in 1Password
+3. Edit `config.yaml` to use 1Password references:
+   ```yaml
+   connections:
+     - name: Production DB
+       protocol: rdp
+       host: db.prod.example.com
+       username: dbadmin
+       password: op://DevOps-Servers/ProdDB/password
+   ```
+4. Commit `config.yaml` to git (safe to commit - no actual passwords!)
+5. Share vault access with team members
+
+### For Team Members (Using)
+
+1. Install 1Password CLI: `winget install 1Password.CLI`
+2. Sign in: `op signin`
+3. Clone the repo and run mremotego
+4. Passwords are automatically retrieved from your 1Password account
+5. Connect to servers without ever seeing the actual passwords!
+
+## Troubleshooting
+
+### "1Password CLI is not available"
+- Install 1Password CLI: https://developer.1password.com/docs/cli/get-started/
+- Verify installation: `op --version`
+
+### "Failed to retrieve secret from 1Password"
+- Ensure you're signed in: `op signin`
+- Check vault access permissions
+- Verify the reference format: `op://vault/item/field`
+- Test manually: `op read "op://vault/item/field"`
+
+### Password prompt appears even with 1Password reference
+- Check that the reference is correctly formatted
+- Ensure 1Password CLI is authenticated: `op account list`
+- Check application logs for 1Password errors
+
+## Security Notes
+
+⚠️ **1Password CLI Session**: The `op` CLI uses session tokens that expire. You may need to re-authenticate periodically using `op signin`.
+
+✅ **Biometric Unlock**: 1Password CLI supports biometric authentication on supported devices.
+
+✅ **Secret References**: 1Password references in the YAML file are safe to commit to git - they're just pointers, not actual passwords.
+
+## Mixing Storage Methods
+
+You can mix storage methods in the same config file:
+
+```yaml
+connections:
+  # 1Password reference (recommended for teams)
+  - name: Production Server
+    password: op://Work/ProdServer/password
+  
+  # DPAPI encrypted (user-specific)
+  - name: Personal Server
+    password: AQAAANCMnd8BFdERjHoAwE...  # Long encrypted string
+  
+  # Plain text (legacy, not recommended)
+  - name: Test Server
+    password: test123
+```
+
+## Additional Resources
+
+- [1Password CLI Documentation](https://developer.1password.com/docs/cli/)
+- [1Password Secret References](https://developer.1password.com/docs/cli/secret-references/)
+- [Managing Team Vaults](https://support.1password.com/create-share-vaults/)

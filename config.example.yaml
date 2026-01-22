@@ -1,0 +1,139 @@
+version: "1.0"
+connections:
+  - name: "Production"
+    type: folder
+    children:
+      - name: "Web Server 1"
+        type: connection
+        protocol: ssh
+        host: web1.prod.example.com
+        port: 22
+        username: deploy
+        description: "Primary web server"
+        tags:
+          - production
+          - web
+        
+      - name: "Web Server 2"
+        type: connection
+        protocol: ssh
+        host: web2.prod.example.com
+        port: 22
+        username: deploy
+        description: "Secondary web server"
+        tags:
+          - production
+          - web
+        
+      - name: "Database Server"
+        type: connection
+        protocol: ssh
+        host: db.prod.example.com
+        port: 22
+        username: dbadmin
+        description: "PostgreSQL production database"
+        tags:
+          - production
+          - database
+  
+  - name: "Development"
+    type: folder
+    children:
+      - name: "Dev Web Server"
+        type: connection
+        protocol: ssh
+        host: web.dev.local
+        port: 2222
+        username: developer
+        description: "Development web server"
+        tags:
+          - development
+          - web
+      
+      - name: "Dev Database"
+        type: connection
+        protocol: ssh
+        host: db.dev.local
+        port: 22
+        username: developer
+        description: "Development database server"
+        tags:
+          - development
+          - database
+  
+  - name: "Windows Servers"
+    type: folder
+    children:
+      - name: "File Server"
+        type: connection
+        protocol: rdp
+        host: files.corp.local
+        port: 3389
+        username: Administrator
+        domain: CORP
+        description: "Corporate file server"
+        color_depth: 32
+        resolution: "1920x1080"
+        tags:
+          - windows
+          - files
+      
+      - name: "Application Server"
+        type: connection
+        protocol: rdp
+        host: app.corp.local
+        port: 3389
+        username: sysadmin
+        domain: CORP
+        description: "Application server"
+        tags:
+          - windows
+          - applications
+  
+  - name: "Network Devices"
+    type: folder
+    children:
+      - name: "Router 1"
+        type: connection
+        protocol: ssh
+        host: 192.168.1.1
+        port: 22
+        username: admin
+        description: "Main office router"
+        tags:
+          - network
+          - router
+      
+      - name: "Switch 1"
+        type: connection
+        protocol: telnet
+        host: 192.168.1.10
+        port: 23
+        username: admin
+        description: "Core switch (legacy telnet)"
+        tags:
+          - network
+          - switch
+  
+  - name: "Web Interfaces"
+    type: folder
+    children:
+      - name: "Router Admin"
+        type: connection
+        protocol: https
+        host: router.local
+        port: 443
+        description: "Router web interface"
+        tags:
+          - web
+          - admin
+      
+      - name: "Monitoring Dashboard"
+        type: connection
+        protocol: https
+        host: monitor.corp.local
+        port: 8443
+        description: "Infrastructure monitoring"
+        tags:
+          - monitoring
+          - web

@@ -1,0 +1,403 @@
+package gui
+
+import (
+	"fmt"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
+	"github.com/yourusername/mremotego/internal/config"
+	"github.com/yourusername/mremotego/internal/launcher"
+	"github.com/yourusername/mremotego/pkg/models"
+)
+
+// MainWindow represents the main application window
+type MainWindow struct {
+	app            fyne.App
+	window         fyne.Window
+	manager        *config.Manager
+	launcher       *launcher.Launcher
+	tree           *widget.Tree
+	detailsCard    *widget.Card
+	selectedConn   *models.Connection
+	connectionData map[string]*models.Connection
+}
+
+// NewMainWindow creates a new main window
+func NewMainWindow(app fyne.App, manager *config.Manager) *MainWindow {
+	w := &MainWindow{
+		app:            app,
+		window:         app.NewWindow("MremoteGO - Remote Connection Manager"),
+		manager:        manager,
+		launcher:       launcher.NewLauncher(),
+		connectionData: make(map[string]*models.Connection),
+	}
+
+	w.setupUI()
+	return w
+}
+
+// setupUI initializes the user interface
+func (w *MainWindow) setupUI() {
+	// Create menu bar
+	w.setupMenuBar()
+
+	// Create toolbar
+	toolbar := w.createToolbar()
+
+	// Create connection tree
+	w.tree = w.createConnectionTree()
+
+	// Create details panel
+	detailsContainer := w.createDetailsPanel()
+
+	// Create split container
+	split := container.NewHSplit(
+		container.NewBorder(nil, nil, nil, nil, w.tree),
+		detailsContainer,
+	)
+	split.Offset = 0.3 // 30% for tree, 70% for details
+
+	// Main content with toolbar
+	content := container.NewBorder(
+		toolbar, // top
+		nil,     // bottom
+		nil,     // left
+		nil,     // right
+		split,   // center
+	)
+
+	w.window.SetContent(content)
+	w.window.Resize(fyne.NewSize(1200, 800))
+	w.window.CenterOnScreen()
+}
+
+// setupMenuBar creates the menu bar
+func (w *MainWindow) setupMenuBar() {
+	fileMenu := fyne.NewMenu("File",
+		fyne.NewMenuItem("New Connection", func() { w.showAddConnectionDialog() }),
+		fyne.NewMenuItem("New Folder", func() { w.showAddFolderDialog() }),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem("Export Config", func() { w.exportConfig() }),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem("Quit", func() { w.app.Quit() }),
+	)
+
+	connectMenu := fyne.NewMenu("Connection",
+		fyne.NewMenuItem("Connect", func() { w.connectToSelected() }),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem("Edit", func() { w.editSelected() }),
+		fyne.NewMenuItem("Delete", func() { w.deleteSelected() }),
+	)
+
+	helpMenu := fyne.NewMenu("Help",
+		fyne.NewMenuItem("About", func() { w.showAbout() }),
+	)
+
+	mainMenu := fyne.NewMainMenu(fileMenu, connectMenu, helpMenu)
+	w.window.SetMainMenu(mainMenu)
+}
+
+// createToolbar creates the toolbar with action buttons
+func (w *MainWindow) createToolbar() *widget.Toolbar {
+	return widget.NewToolbar(
+		widget.NewToolbarAction(theme.ContentAddIcon(), func() {
+			w.showAddConnectionDialog()
+		}),
+		widget.NewToolbarAction(theme.FolderNewIcon(), func() {
+			w.showAddFolderDialog()
+		}),
+		widget.NewToolbarSeparator(),
+		widget.NewToolbarAction(theme.MediaPlayIcon(), func() {
+			w.connectToSelected()
+		}),
+		widget.NewToolbarSeparator(),
+		widget.NewToolbarAction(theme.DocumentCreateIcon(), func() {
+			w.editSelected()
+		}),
+		widget.NewToolbarAction(theme.DeleteIcon(), func() {
+			w.deleteSelected()
+		}),
+		widget.NewToolbarSeparator(),
+		widget.NewToolbarAction(theme.ViewRefreshIcon(), func() {
+			w.refreshTree()
+		}),
+	)
+}
+
+// createConnectionTree creates the tree widget for connections
+func (w *MainWindow) createConnectionTree() *widget.Tree {
+	w.buildConnectionMap()
+
+	tree := widget.NewTree(
+		// ChildUIDs
+		func(uid string) []string {
+			if uid == "" {
+				// Root level
+				var ids []string
+				for _, conn := range w.manager.GetConfig().Connections {
+					id := w.getConnectionID(conn)
+					ids = append(ids, id)
+				}
+				return ids
+			}
+
+			conn, exists := w.connectionData[uid]
+			if !exists || !conn.IsFolder() {
+				return []string{}
+			}
+
+			var ids []string
+			for _, child := range conn.Children {
+				ids = append(ids, w.getConnectionID(child))
+			}
+			return ids
+		},
+		// IsBranch
+		func(uid string) bool {
+			if uid == "" {
+				return true
+			}
+			conn, exists := w.connectionData[uid]
+			return exists && conn.IsFolder()
+		},
+		// Create
+		func(branch bool) fyne.CanvasObject {
+			return widget.NewLabel("Template")
+		},
+		// Update
+		func(uid string, branch bool, obj fyne.CanvasObject) {
+			conn, exists := w.connectionData[uid]
+			if !exists {
+				return
+			}
+
+			label := obj.(*widget.Label)
+			icon := w.getConnectionIcon(conn)
+			label.SetText(icon + " " + conn.Name)
+		},
+	)
+
+	tree.OnSelected = func(uid string) {
+		if conn, exists := w.connectionData[uid]; exists {
+			w.selectedConn = conn
+			w.updateDetailsPanel(conn)
+		}
+	}
+
+	return tree
+}
+
+// createDetailsPanel creates the details panel on the right
+func (w *MainWindow) createDetailsPanel() *fyne.Container {
+	w.detailsCard = widget.NewCard("Connection Details", "", widget.NewLabel("Select a connection to view details"))
+
+	return container.NewBorder(
+		nil, nil, nil, nil,
+		container.NewVScroll(w.detailsCard),
+	)
+}
+
+// updateDetailsPanel updates the details panel with connection info
+func (w *MainWindow) updateDetailsPanel(conn *models.Connection) {
+	if conn.IsFolder() {
+		childCount := len(conn.Children)
+		w.detailsCard.SetTitle("📁 " + conn.Name)
+		w.detailsCard.SetSubTitle("Folder")
+		w.detailsCard.SetContent(widget.NewLabel(fmt.Sprintf("Contains %d item(s)", childCount)))
+		return
+	}
+
+	icon := w.getConnectionIcon(conn)
+	w.detailsCard.SetTitle(icon + " " + conn.Name)
+	w.detailsCard.SetSubTitle(string(conn.Protocol))
+
+	details := container.NewVBox(
+		widget.NewLabel("Host: "+conn.Host),
+		widget.NewLabel(fmt.Sprintf("Port: %d", conn.Port)),
+	)
+
+	if conn.Username != "" {
+		details.Add(widget.NewLabel("Username: " + conn.Username))
+	}
+
+	if conn.Domain != "" {
+		details.Add(widget.NewLabel("Domain: " + conn.Domain))
+	}
+
+	if conn.Description != "" {
+		details.Add(widget.NewLabel(""))
+		details.Add(widget.NewLabel("Description:"))
+		details.Add(widget.NewLabel(conn.Description))
+	}
+
+	if len(conn.Tags) > 0 {
+		details.Add(widget.NewLabel(""))
+		tags := "Tags: "
+		for i, tag := range conn.Tags {
+			if i > 0 {
+				tags += ", "
+			}
+			tags += tag
+		}
+		details.Add(widget.NewLabel(tags))
+	}
+
+	// Add connect button
+	details.Add(widget.NewLabel(""))
+	connectBtn := widget.NewButton("Connect", func() {
+		w.connectToConnection(conn)
+	})
+	details.Add(connectBtn)
+
+	w.detailsCard.SetContent(details)
+}
+
+// Helper functions
+func (w *MainWindow) buildConnectionMap() {
+	w.connectionData = make(map[string]*models.Connection)
+	w.buildConnectionMapRecursive(w.manager.GetConfig().Connections, "")
+}
+
+func (w *MainWindow) buildConnectionMapRecursive(connections []*models.Connection, prefix string) {
+	for i, conn := range connections {
+		id := fmt.Sprintf("%s%d", prefix, i)
+		w.connectionData[id] = conn
+
+		if conn.IsFolder() {
+			w.buildConnectionMapRecursive(conn.Children, id+"_")
+		}
+	}
+}
+
+func (w *MainWindow) getConnectionID(conn *models.Connection) string {
+	for id, c := range w.connectionData {
+		if c == conn {
+			return id
+		}
+	}
+	return ""
+}
+
+func (w *MainWindow) getConnectionIcon(conn *models.Connection) string {
+	if conn.IsFolder() {
+		return "📁"
+	}
+
+	switch conn.Protocol {
+	case models.ProtocolSSH:
+		return "🔐"
+	case models.ProtocolRDP:
+		return "🖥️"
+	case models.ProtocolVNC:
+		return "📺"
+	case models.ProtocolHTTP, models.ProtocolHTTPS:
+		return "🌐"
+	case models.ProtocolTelnet:
+		return "📟"
+	default:
+		return "🔌"
+	}
+}
+
+// Action handlers
+func (w *MainWindow) connectToSelected() {
+	if w.selectedConn == nil {
+		dialog.ShowInformation("No Selection", "Please select a connection first", w.window)
+		return
+	}
+
+	if w.selectedConn.IsFolder() {
+		dialog.ShowInformation("Cannot Connect", "Cannot connect to a folder", w.window)
+		return
+	}
+
+	w.connectToConnection(w.selectedConn)
+}
+
+func (w *MainWindow) connectToConnection(conn *models.Connection) {
+	if err := w.launcher.Launch(conn); err != nil {
+		dialog.ShowError(fmt.Errorf("Failed to launch connection: %w", err), w.window)
+		return
+	}
+
+	dialog.ShowInformation("Connected", fmt.Sprintf("Launched connection to %s", conn.Name), w.window)
+}
+
+func (w *MainWindow) editSelected() {
+	if w.selectedConn == nil {
+		dialog.ShowInformation("No Selection", "Please select a connection first", w.window)
+		return
+	}
+
+	if w.selectedConn.IsFolder() {
+		w.showEditFolderDialog(w.selectedConn)
+	} else {
+		w.showEditConnectionDialog(w.selectedConn)
+	}
+}
+
+func (w *MainWindow) deleteSelected() {
+	if w.selectedConn == nil {
+		dialog.ShowInformation("No Selection", "Please select a connection first", w.window)
+		return
+	}
+
+	dialog.ShowConfirm("Delete Confirmation",
+		fmt.Sprintf("Are you sure you want to delete '%s'?", w.selectedConn.Name),
+		func(confirmed bool) {
+			if confirmed {
+				// Clean up Windows credentials for RDP connections
+				if w.selectedConn.Protocol == models.ProtocolRDP {
+					if err := w.launcher.RemoveWindowsCredential(w.selectedConn); err != nil {
+						// Just log the error, don't block deletion
+						fmt.Printf("Warning: Failed to remove credentials: %v\n", err)
+					}
+				}
+
+				if err := w.manager.DeleteConnection(w.selectedConn.Name); err != nil {
+					dialog.ShowError(err, w.window)
+					return
+				}
+
+				if err := w.manager.Save(); err != nil {
+					dialog.ShowError(err, w.window)
+					return
+				}
+
+				w.refreshTree()
+				dialog.ShowInformation("Success", "Connection deleted", w.window)
+			}
+		}, w.window)
+}
+
+func (w *MainWindow) refreshTree() {
+	if err := w.manager.Load(); err != nil {
+		dialog.ShowError(err, w.window)
+		return
+	}
+
+	w.buildConnectionMap()
+	w.tree.Refresh()
+	w.selectedConn = nil
+	w.detailsCard.SetContent(widget.NewLabel("Select a connection to view details"))
+}
+
+func (w *MainWindow) exportConfig() {
+	dialog.ShowInformation("Export", "Export functionality - save config to file", w.window)
+}
+
+func (w *MainWindow) showAbout() {
+	dialog.ShowInformation("About MremoteGO",
+		"MremoteGO v1.0\n\nA Git-compatible remote connection manager\n\n"+
+			"Built with Go and Fyne\n\n"+
+			"© 2026 Your Name",
+		w.window)
+}
+
+// Show displays the main window
+func (w *MainWindow) Show() {
+	w.window.ShowAndRun()
+}
