@@ -8,7 +8,8 @@ if (!(Test-Path -Path "bin")) {
 }
 
 # Build the GUI application
-go build -o bin/mremotego-gui.exe cmd/mremotego-gui/main.go cmd/mremotego-gui/theme.go
+# -ldflags "-H windowsgui" prevents the console window from appearing
+go build -ldflags "-H windowsgui" -o bin/mremotego-gui.exe cmd/mremotego-gui/main.go cmd/mremotego-gui/theme.go
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✓ Build successful: bin/mremotego-gui.exe" -ForegroundColor Green

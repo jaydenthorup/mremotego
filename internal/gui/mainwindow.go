@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/yourusername/mremotego/internal/config"
@@ -77,6 +78,8 @@ func (w *MainWindow) setupUI() {
 // setupMenuBar creates the menu bar
 func (w *MainWindow) setupMenuBar() {
 	fileMenu := fyne.NewMenu("File",
+		fyne.NewMenuItem("Open Config...", func() { w.openConfig() }),
+		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("New Connection", func() { w.showAddConnectionDialog() }),
 		fyne.NewMenuItem("New Folder", func() { w.showAddFolderDialog() }),
 		fyne.NewMenuItemSeparator(),
@@ -383,6 +386,38 @@ func (w *MainWindow) refreshTree() {
 	w.tree.Refresh()
 	w.selectedConn = nil
 	w.detailsCard.SetContent(widget.NewLabel("Select a connection to view details"))
+}
+
+func (w *MainWindow) openConfig() {
+	fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
+		if err != nil {
+			dialog.ShowError(err, w.window)
+			return
+		}
+		if reader == nil {
+			return
+		}
+		defer reader.Close()
+
+		// Get the file path
+		filePath := reader.URI().Path()
+
+		// Create a new manager with the selected file
+		newManager := config.NewManager(filePath)
+		if err := newManager.Load(); err != nil {
+			dialog.ShowError(fmt.Errorf("failed to load config: %w", err), w.window)
+			return
+		}
+
+		// Replace the current manager and reload the tree
+		w.manager = newManager
+		w.refreshTree()
+		
+		dialog.ShowInformation("Config Loaded", fmt.Sprintf("Loaded config from:\n%s", filePath), w.window)
+	}, w.window)
+
+	fileDialog.SetFilter(storage.NewExtensionFileFilter([]string{".yaml", ".yml"}))
+	fileDialog.Show()
 }
 
 func (w *MainWindow) exportConfig() {

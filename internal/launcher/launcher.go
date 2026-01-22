@@ -477,19 +477,3 @@ func (l *Launcher) CleanupAllCredentials(connections []*models.Connection) error
 
 	return nil
 }
-
-// encodePassword encodes password for RDP file using Windows DPAPI
-func encodePassword(password string) string {
-	if password == "" {
-		return ""
-	}
-
-	// Use Windows DPAPI to encrypt the password
-	encrypted, err := encryptPasswordWindows(password)
-	if err != nil {
-		// If encryption fails, return empty (mstsc will prompt)
-		return ""
-	}
-
-	return encrypted
-}

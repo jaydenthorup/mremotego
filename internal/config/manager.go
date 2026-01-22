@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
-	"github.com/yourusername/mremotego/internal/launcher"
 	"github.com/yourusername/mremotego/internal/secrets"
 	"github.com/yourusername/mremotego/pkg/models"
 	"gopkg.in/yaml.v3"
@@ -29,6 +27,7 @@ func NewManager(configPath string) *Manager {
 }
 
 // GetDefaultConfigPath returns the default configuration file path
+// It checks for a recent file first, then falls back to the default location
 func GetDefaultConfigPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -43,6 +42,16 @@ func GetDefaultConfigPath() (string, error) {
 	} else {
 		// Linux/Mac
 		configDir = filepath.Join(homeDir, ".config", "mremotego")
+	}
+
+	// Check if there's a recent file saved
+	recentFilePath := filepath.Join(configDir, "recent.txt")
+	if data, err := os.ReadFile(recentFilePath); err == nil {
+		recentPath := string(data)
+		// Verify the file still exists
+		if _, err := os.Stat(recentPath); err == nil {
+			return recentPath, nil
+		}
 	}
 
 	return filepath.Join(configDir, "config.yaml"), nil
@@ -65,10 +74,12 @@ func (m *Manager) Load() error {
 		return fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// Decrypt passwords after loading (if on Windows with DPAPI support)
-	m.decryptPasswords(&config)
-
+	// No decryption needed - 1Password references stay as-is, plain text stays as-is
 	m.config = &config
+	
+	// Save this as the most recently used config file
+	m.saveRecentFile()
+	
 	return nil
 }
 
@@ -84,11 +95,9 @@ func (m *Manager) Save() error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Create a copy of config for encryption (don't modify original)
-	configCopy := *m.config
-	m.encryptPasswords(&configCopy)
-
-	data, err := yaml.Marshal(&configCopy)
+	// No encryption needed - save config as-is
+	// 1Password references and plain text passwords are stored directly
+	data, err := yaml.Marshal(m.config)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
@@ -296,105 +305,6 @@ func (m *Manager) UpdateConnection(name string, updates *models.Connection) erro
 	return nil
 }
 
-// encryptPasswords recursively encrypts all passwords in the config
-func (m *Manager) encryptPasswords(config *models.Config) {
-	m.encryptPasswordsRecursive(config.Connections)
-}
-
-// encryptPasswordsRecursive recursively encrypts passwords in connections
-func (m *Manager) encryptPasswordsRecursive(connections []*models.Connection) {
-	for _, conn := range connections {
-		if conn.Password != "" {
-			// Don't encrypt 1Password references - keep them as-is
-			if !m.onePasswordProvider.IsReference(conn.Password) && !isEncrypted(conn.Password) {
-				// Encrypt using DPAPI (Windows) or base64 fallback (other platforms)
-				if encrypted, err := encryptPassword(conn.Password); err == nil {
-					conn.Password = encrypted
-				}
-			}
-		}
-		if len(conn.Children) > 0 {
-			m.encryptPasswordsRecursive(conn.Children)
-		}
-	}
-}
-
-// decryptPasswords recursively decrypts all passwords in the config
-func (m *Manager) decryptPasswords(config *models.Config) {
-	m.decryptPasswordsRecursive(config.Connections)
-}
-
-// decryptPasswordsRecursive recursively decrypts passwords in connections
-func (m *Manager) decryptPasswordsRecursive(connections []*models.Connection) {
-	for _, conn := range connections {
-		if conn.Password != "" {
-			// Check if it's a 1Password reference first
-			if m.onePasswordProvider.IsReference(conn.Password) {
-				// Keep 1Password references as-is, don't resolve them during load
-				// They will be resolved when actually connecting
-				continue
-			} else if isEncrypted(conn.Password) {
-				// Decrypt using DPAPI (Windows) or base64 fallback (other platforms)
-				if decrypted, err := decryptPassword(conn.Password); err == nil {
-					conn.Password = decrypted
-				} else {
-					// If decryption fails (e.g., different user/machine), clear the password
-					// User will need to re-enter it
-					conn.Password = ""
-				}
-			}
-			// Otherwise it's plain text (legacy or fallback)
-		}
-		if len(conn.Children) > 0 {
-			m.decryptPasswordsRecursive(conn.Children)
-		}
-	}
-}
-
-// isEncrypted checks if a password string is encrypted (base64 encoded)
-func isEncrypted(password string) bool {
-	// Check if it looks like base64 (length > 20 and only valid base64 chars)
-	if len(password) < 20 {
-		return false
-	}
-	for _, ch := range password {
-		if !((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
-			(ch >= '0' && ch <= '9') || ch == '+' || ch == '/' || ch == '=') {
-			return false
-		}
-	}
-	return true
-}
-
-// encryptPassword encrypts a password using Windows DPAPI or fallback
-func encryptPassword(password string) (string, error) {
-	if runtime.GOOS == "windows" {
-		// Use Windows DPAPI via the launcher package
-		encrypted, err := launcher.EncryptPasswordWindows(password)
-		if err != nil {
-			return "", err
-		}
-		return encrypted, nil
-	}
-	// For non-Windows, we'd need a different encryption method
-	// For now, just return the password (TODO: implement cross-platform encryption)
-	return password, nil
-}
-
-// decryptPassword decrypts a password using Windows DPAPI or fallback
-func decryptPassword(encrypted string) (string, error) {
-	if runtime.GOOS == "windows" {
-		// Use Windows DPAPI via the launcher package
-		decrypted, err := launcher.DecryptPasswordWindows(encrypted)
-		if err != nil {
-			return "", err
-		}
-		return decrypted, nil
-	}
-	// For non-Windows, return as-is
-	return encrypted, nil
-}
-
 // IsOnePasswordReference checks if a password is a 1Password reference
 func (m *Manager) IsOnePasswordReference(password string) bool {
 	return m.onePasswordProvider.IsReference(password)
@@ -403,4 +313,33 @@ func (m *Manager) IsOnePasswordReference(password string) bool {
 // CreateOnePasswordItem creates a new 1Password item and returns the reference
 func (m *Manager) CreateOnePasswordItem(vault, title, username, password string) (string, error) {
 	return m.onePasswordProvider.CreateItem(vault, title, username, password)
+}
+
+// saveRecentFile saves the current config path as the most recently used file
+func (m *Manager) saveRecentFile() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	var configDir string
+	if os.Getenv("APPDATA") != "" {
+		configDir = filepath.Join(os.Getenv("APPDATA"), "mremotego")
+	} else {
+		configDir = filepath.Join(homeDir, ".config", "mremotego")
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return err
+	}
+
+	recentFilePath := filepath.Join(configDir, "recent.txt")
+	// Get absolute path
+	absPath, err := filepath.Abs(m.configPath)
+	if err != nil {
+		absPath = m.configPath
+	}
+	
+	return os.WriteFile(recentFilePath, []byte(absPath), 0644)
 }
