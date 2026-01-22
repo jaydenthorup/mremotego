@@ -15,7 +15,7 @@ func main() {
 	// Create Fyne application
 	myApp := app.NewWithID("com.mremotego.app")
 	myApp.Settings().SetTheme(&customTheme{})
-	
+
 	// Set application icon
 	if icon := gui.GetAppIcon(); icon != nil {
 		myApp.SetIcon(icon)

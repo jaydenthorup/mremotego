@@ -76,10 +76,10 @@ func (m *Manager) Load() error {
 
 	// No decryption needed - 1Password references stay as-is, plain text stays as-is
 	m.config = &config
-	
+
 	// Save this as the most recently used config file
 	m.saveRecentFile()
-	
+
 	return nil
 }
 
@@ -340,6 +340,6 @@ func (m *Manager) saveRecentFile() error {
 	if err != nil {
 		absPath = m.configPath
 	}
-	
+
 	return os.WriteFile(recentFilePath, []byte(absPath), 0644)
 }

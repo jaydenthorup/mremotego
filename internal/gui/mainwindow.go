@@ -412,7 +412,7 @@ func (w *MainWindow) openConfig() {
 		// Replace the current manager and reload the tree
 		w.manager = newManager
 		w.refreshTree()
-		
+
 		dialog.ShowInformation("Config Loaded", fmt.Sprintf("Loaded config from:\n%s", filePath), w.window)
 	}, w.window)
 
