@@ -101,7 +101,7 @@ func (l *Launcher) launchSSH(conn *models.Connection) error {
 
 		// Try putty.exe first, fall back to ssh if not found
 		cmd := exec.Command("putty.exe", args...)
-		hideConsoleWindow(cmd)
+		// Don't hide putty - it's a GUI application we want to see
 		if err := cmd.Start(); err != nil {
 			// Fall back to ssh command
 			return l.launchSSHFallback(conn)
@@ -142,7 +142,7 @@ func (l *Launcher) launchSSHFallback(conn *models.Connection) error {
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	hideConsoleWindow(cmd)
+	// Don't hide SSH - it needs a terminal window
 
 	return cmd.Start()
 }
@@ -179,7 +179,7 @@ func (l *Launcher) launchRDP(conn *models.Connection) error {
 
 		// Launch mstsc with the RDP file
 		cmd = exec.Command("mstsc", rdpFile)
-		hideConsoleWindow(cmd)
+		// Don't hide mstsc - it's a GUI application we want to see
 
 	case "linux", "darwin":
 		// Use xfreerdp on Linux/Mac
@@ -215,7 +215,7 @@ func (l *Launcher) launchRDP(conn *models.Connection) error {
 		}
 
 		cmd = exec.Command("xfreerdp", args...)
-		hideConsoleWindow(cmd)
+		// Don't hide xfreerdp - it's a GUI application we want to see
 
 	default:
 		return fmt.Errorf("RDP not supported on this platform")
@@ -257,7 +257,7 @@ func (l *Launcher) launchVNC(conn *models.Connection) error {
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	hideConsoleWindow(cmd)
+	// Don't hide VNC - it's a GUI application we want to see
 
 	return cmd.Start()
 }
@@ -300,7 +300,7 @@ func (l *Launcher) launchTelnet(conn *models.Connection) error {
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	hideConsoleWindow(cmd)
+	// Don't hide telnet - it needs a terminal window
 
 	return cmd.Start()
 }
