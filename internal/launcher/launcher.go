@@ -53,8 +53,56 @@ func (l *Launcher) Launch(conn *models.Connection) error {
 	}
 }
 
-// launchSSH launches an SSH connection
+// launchSSH launches an SSH connection using PuTTY on Windows, ssh otherwise
 func (l *Launcher) launchSSH(conn *models.Connection) error {
+	port := conn.Port
+	if port == 0 {
+		port = models.ProtocolSSH.GetDefaultPort()
+	}
+
+	if runtime.GOOS == "windows" {
+		// Use PuTTY on Windows
+		args := []string{}
+
+		// Add SSH protocol
+		args = append(args, "-ssh")
+
+		// Add port
+		args = append(args, "-P", strconv.Itoa(port))
+
+		// Add username if provided
+		if conn.Username != "" {
+			args = append(args, "-l", conn.Username)
+		}
+
+		// Add password if provided (for auto-login)
+		if conn.Password != "" {
+			args = append(args, "-pw", conn.Password)
+		}
+
+		// Add extra args if provided
+		if conn.ExtraArgs != "" {
+			args = append(args, conn.ExtraArgs)
+		}
+
+		// Add hostname last
+		args = append(args, conn.Host)
+
+		// Try putty.exe first, fall back to ssh if not found
+		cmd := exec.Command("putty.exe", args...)
+		if err := cmd.Start(); err != nil {
+			// Fall back to ssh command
+			return l.launchSSHFallback(conn)
+		}
+		return nil
+	}
+
+	// Use ssh on Linux/Mac
+	return l.launchSSHFallback(conn)
+}
+
+// launchSSHFallback uses the standard ssh command as fallback
+func (l *Launcher) launchSSHFallback(conn *models.Connection) error {
 	port := conn.Port
 	if port == 0 {
 		port = models.ProtocolSSH.GetDefaultPort()

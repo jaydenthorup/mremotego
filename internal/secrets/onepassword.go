@@ -47,10 +47,13 @@ func (p *OnePasswordProvider) ResolveSecret(reference string) (string, error) {
 	}
 
 	// Use 'op read' to retrieve the secret
+	// This will prompt for biometric auth if needed - don't pre-check authentication
 	cmd := exec.Command("op", "read", reference)
-	output, err := cmd.Output()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("failed to retrieve secret from 1Password: %w", err)
+		// Provide helpful error message based on the output
+		errorMsg := string(output)
+		return "", fmt.Errorf("failed to retrieve secret: %s", strings.TrimSpace(errorMsg))
 	}
 
 	// Trim whitespace and return
@@ -59,6 +62,9 @@ func (p *OnePasswordProvider) ResolveSecret(reference string) (string, error) {
 }
 
 // ResolveIfReference resolves a value if it's a 1Password reference, otherwise returns it as-is
+// ResolveIfReference resolves a value if it's a 1Password reference, otherwise returns it as-is
+// Note: This uses the 1Password CLI which will prompt for biometric auth if needed
+// TODO: Consider migrating to https://github.com/1Password/onepassword-sdk-go for better integration
 func (p *OnePasswordProvider) ResolveIfReference(value string) string {
 	if !p.IsReference(value) {
 		return value
@@ -128,7 +134,7 @@ func (p *OnePasswordProvider) ListVaults() ([]string, error) {
 	// Simple parsing - extract vault names (this is a simplified version)
 	// In production, you'd want to parse the JSON properly
 	vaults := []string{"Private", "DevOps", "Employee"} // Default common vaults
-	
+
 	// For now, return common vaults. You could parse JSON if needed
 	return vaults, nil
 }

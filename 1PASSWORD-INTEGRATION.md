@@ -6,7 +6,38 @@ MremoteGO supports storing passwords in 1Password and referencing them in your c
 
 1. Install [1Password CLI](https://developer.1password.com/docs/cli/get-started/)
 2. Sign in to 1Password CLI: `op signin`
-3. Ensure you have items stored in 1Password vaults
+3. **Enable biometric unlock** (recommended for persistent sessions)
+
+## Setup for Persistent Sessions
+
+To avoid having to authenticate repeatedly, configure 1Password CLI for persistent sessions:
+
+### Windows (Recommended Setup)
+
+1. **Sign in with biometric unlock enabled:**
+   ```powershell
+   op signin
+   ```
+
+2. **Turn on 1Password app integration:**
+   - Open 1Password app
+   - Go to Settings → Developer
+   - Enable "Connect with 1Password CLI"
+   - Enable "Integrate with 1Password app"
+
+3. **Verify integration:**
+   ```powershell
+   op account list
+   op vault list
+   ```
+
+With this setup, 1Password CLI will use your existing 1Password app session and biometric unlock. No need to enter passwords repeatedly!
+
+### Session Duration
+
+- **With app integration**: Session lasts as long as your 1Password app is unlocked
+- **Without app integration**: Session expires after inactivity (default: 30 minutes)
+- **Biometric unlock**: Touch ID/Windows Hello unlocks CLI automatically
 
 ## Usage
 
@@ -110,15 +141,50 @@ MremoteGO supports three password storage methods (in order of priority):
 - Verify installation: `op --version`
 
 ### "Failed to retrieve secret from 1Password"
-- Ensure you're signed in: `op signin`
-- Check vault access permissions
-- Verify the reference format: `op://vault/item/field`
-- Test manually: `op read "op://vault/item/field"`
+- **Check authentication**: `op account list`
+- **Sign in if needed**: `op signin`
+- **Check vault access**: `op vault list`
+- **Verify reference format**: `op://vault/item/field`
+- **Test manually**: `op read "op://vault/item/field"`
+
+### Session Keeps Expiring
+
+**Best solution - Enable app integration:**
+1. Open 1Password app → Settings → Developer
+2. Enable "Connect with 1Password CLI"
+3. Enable "Integrate with 1Password app"
+4. Restart your terminal
+5. CLI will now use your app session (stays signed in)
+
+**Alternative - Use environment variable:**
+```powershell
+# Sign in and export session token
+$env:OP_SESSION_my = $(op signin --raw)
+
+# Or sign in normally (will prompt for password)
+op signin
+```
+
+**Verify persistent session:**
+```powershell
+# Should show your accounts without prompting
+op account list
+
+# Should work without password prompt
+op read "op://Private/test/password"
+```
 
 ### Password prompt appears even with 1Password reference
-- Check that the reference is correctly formatted
-- Ensure 1Password CLI is authenticated: `op account list`
-- Check application logs for 1Password errors
+- Check that the reference is correctly formatted in config
+- Ensure 1Password CLI is authenticated: `op account get`
+- Check that the item exists: `op item get "item-name" --vault "vault-name"`
+- Look for error messages in the console output
+
+### Biometric Unlock Not Working
+- Ensure 1Password app is installed and unlocked
+- Check Settings → Developer → "Use biometric unlock for 1Password CLI"
+- Restart terminal after enabling
+- On Windows: Ensure Windows Hello is configured
 
 ## Security Notes
 
