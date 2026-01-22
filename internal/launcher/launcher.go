@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/yourusername/mremotego/internal/secrets"
 	"github.com/yourusername/mremotego/pkg/models"
@@ -22,6 +23,16 @@ type Launcher struct {
 func NewLauncher() *Launcher {
 	return &Launcher{
 		onePasswordProvider: secrets.NewOnePasswordProvider(),
+	}
+}
+
+// hideConsoleWindow sets the command attributes to hide console windows on Windows
+func hideConsoleWindow(cmd *exec.Cmd) {
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			HideWindow:    true,
+			CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+		}
 	}
 }
 
@@ -90,6 +101,7 @@ func (l *Launcher) launchSSH(conn *models.Connection) error {
 
 		// Try putty.exe first, fall back to ssh if not found
 		cmd := exec.Command("putty.exe", args...)
+		hideConsoleWindow(cmd)
 		if err := cmd.Start(); err != nil {
 			// Fall back to ssh command
 			return l.launchSSHFallback(conn)
@@ -130,6 +142,7 @@ func (l *Launcher) launchSSHFallback(conn *models.Connection) error {
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
+	hideConsoleWindow(cmd)
 
 	return cmd.Start()
 }
@@ -166,6 +179,7 @@ func (l *Launcher) launchRDP(conn *models.Connection) error {
 
 		// Launch mstsc with the RDP file
 		cmd = exec.Command("mstsc", rdpFile)
+		hideConsoleWindow(cmd)
 
 	case "linux", "darwin":
 		// Use xfreerdp on Linux/Mac
@@ -201,6 +215,7 @@ func (l *Launcher) launchRDP(conn *models.Connection) error {
 		}
 
 		cmd = exec.Command("xfreerdp", args...)
+		hideConsoleWindow(cmd)
 
 	default:
 		return fmt.Errorf("RDP not supported on this platform")
@@ -242,6 +257,7 @@ func (l *Launcher) launchVNC(conn *models.Connection) error {
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
+	hideConsoleWindow(cmd)
 
 	return cmd.Start()
 }
@@ -259,6 +275,7 @@ func (l *Launcher) launchHTTP(conn *models.Connection) error {
 	switch runtime.GOOS {
 	case "windows":
 		cmd = exec.Command("cmd", "/c", "start", url)
+		hideConsoleWindow(cmd)
 	case "darwin":
 		cmd = exec.Command("open", url)
 	case "linux":
@@ -283,6 +300,7 @@ func (l *Launcher) launchTelnet(conn *models.Connection) error {
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
+	hideConsoleWindow(cmd)
 
 	return cmd.Start()
 }
@@ -425,6 +443,8 @@ func (l *Launcher) storeWindowsCredential(conn *models.Connection) error {
 	// Use cmdkey to store the credential
 	// cmdkey /generic:TERMSRV/hostname /user:username /pass:password
 	cmd := exec.Command("cmdkey", "/generic:TERMSRV/"+target, "/user:"+username, "/pass:"+conn.Password)
+	hideConsoleWindow(cmd)
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("cmdkey failed: %w, output: %s", err, string(output))
@@ -452,6 +472,8 @@ func (l *Launcher) RemoveWindowsCredential(conn *models.Connection) error {
 	// Use cmdkey to delete the credential
 	// cmdkey /delete:TERMSRV/hostname
 	cmd := exec.Command("cmdkey", "/delete:TERMSRV/"+target)
+	hideConsoleWindow(cmd)
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Don't return error if credential doesn't exist
