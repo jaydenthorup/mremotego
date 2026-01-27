@@ -167,6 +167,20 @@ func (w *MainWindow) showEditConnectionDialog(conn *models.Connection) {
 	descriptionEntry := widget.NewMultiLineEntry()
 	descriptionEntry.SetText(conn.Description)
 
+	// 1Password integration for edit
+	storeTo1PasswordCheck := widget.NewCheck("Push password to 1Password", nil)
+	vaultSelect := widget.NewSelect([]string{"DevOps", "Private", "Employee"}, nil)
+	vaultSelect.SetSelected("DevOps")
+	vaultSelect.Hide()
+
+	storeTo1PasswordCheck.OnChanged = func(checked bool) {
+		if checked {
+			vaultSelect.Show()
+		} else {
+			vaultSelect.Hide()
+		}
+	}
+
 	form := &widget.Form{
 		Items: []*widget.FormItem{
 			{Text: "Name", Widget: nameEntry},
@@ -177,13 +191,29 @@ func (w *MainWindow) showEditConnectionDialog(conn *models.Connection) {
 			{Text: "Password", Widget: passwordEntry},
 			{Text: "Domain", Widget: domainEntry},
 			{Text: "Description", Widget: descriptionEntry},
+			{Text: "", Widget: storeTo1PasswordCheck},
+			{Text: "Vault", Widget: vaultSelect},
 		},
 		OnSubmit: func() {
+			// If user wants to push password to 1Password
+			if storeTo1PasswordCheck.Checked && passwordEntry.Text != "" && !w.manager.IsOnePasswordReference(passwordEntry.Text) {
+				vault := vaultSelect.Selected
+				reference, err := w.manager.CreateOnePasswordItem(vault, nameEntry.Text, usernameEntry.Text, passwordEntry.Text)
+				if err != nil {
+					dialog.ShowError(fmt.Errorf("Failed to create 1Password item: %w", err), w.window)
+					return
+				}
+				// Replace password with 1Password reference
+				conn.Password = reference
+				dialog.ShowInformation("Success", fmt.Sprintf("Password stored in 1Password vault '%s'", vault), w.window)
+			} else {
+				conn.Password = passwordEntry.Text
+			}
+
 			conn.Name = nameEntry.Text
 			conn.Protocol = models.Protocol(protocolSelect.Selected)
 			conn.Host = hostEntry.Text
 			conn.Username = usernameEntry.Text
-			conn.Password = passwordEntry.Text
 			conn.Domain = domainEntry.Text
 			conn.Description = descriptionEntry.Text
 			conn.Modified = time.Now().Format(time.RFC3339)
@@ -204,7 +234,7 @@ func (w *MainWindow) showEditConnectionDialog(conn *models.Connection) {
 	}
 
 	d := dialog.NewCustom("Edit Connection", "Cancel", form, w.window)
-	d.Resize(fyne.NewSize(500, 600))
+	d.Resize(fyne.NewSize(500, 700))
 	d.Show()
 }
 
