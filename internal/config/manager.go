@@ -39,7 +39,6 @@ func (m *Manager) GetConfigPath() string {
 	return m.configPath
 }
 
-
 // GetDefaultConfigPath returns the default configuration file path
 // It checks for a recent file first, then falls back to the default location
 func GetDefaultConfigPath() (string, error) {
