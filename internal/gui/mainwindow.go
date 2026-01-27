@@ -547,5 +547,12 @@ func (w *MainWindow) showAbout() {
 
 // Show displays the main window
 func (w *MainWindow) Show() {
-	w.window.ShowAndRun()
+	w.window.Show()
+}
+
+// Reload refreshes the window with the loaded config
+func (w *MainWindow) Reload() {
+	w.buildConnectionMap()
+	w.tree.Refresh()
+	w.updateStatus()
 }

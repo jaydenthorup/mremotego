@@ -32,5 +32,11 @@ Thumbs.db
 bin/
 dist/
 
-# Local config (optional - remove if you want to track user configs)
-# config.yaml
+# Local config files with passwords/connections (should not be committed)
+connections.yaml
+config.yaml
+MremoteGO-Config.xml
+
+# Encryption tools
+encrypt-passwords
+encrypt-passwords.exe

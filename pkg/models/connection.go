@@ -110,3 +110,66 @@ func (p Protocol) GetDefaultPort() int {
 		return 0
 	}
 }
+
+// DeepCopy creates a deep copy of a Connection
+func (c *Connection) DeepCopy() *Connection {
+	if c == nil {
+		return nil
+	}
+
+	connCopy := &Connection{
+		Name:        c.Name,
+		Type:        c.Type,
+		Protocol:    c.Protocol,
+		Host:        c.Host,
+		Port:        c.Port,
+		Username:    c.Username,
+		Password:    c.Password,
+		Domain:      c.Domain,
+		Description: c.Description,
+		UseCredSSP:  c.UseCredSSP,
+		ColorDepth:  c.ColorDepth,
+		Resolution:  c.Resolution,
+		ExtraArgs:   c.ExtraArgs,
+		Notes:       c.Notes,
+		Created:     c.Created,
+		Modified:    c.Modified,
+	}
+
+	// Deep copy tags
+	if len(c.Tags) > 0 {
+		connCopy.Tags = make([]string, len(c.Tags))
+		copy(connCopy.Tags, c.Tags)
+	}
+
+	// Deep copy children
+	if len(c.Children) > 0 {
+		connCopy.Children = make([]*Connection, len(c.Children))
+		for i, child := range c.Children {
+			connCopy.Children[i] = child.DeepCopy()
+		}
+	}
+
+	return connCopy
+}
+
+// DeepCopy creates a deep copy of a Config
+func (cfg *Config) DeepCopy() *Config {
+	if cfg == nil {
+		return nil
+	}
+
+	cfgCopy := &Config{
+		Version: cfg.Version,
+	}
+
+	// Deep copy connections
+	if len(cfg.Connections) > 0 {
+		cfgCopy.Connections = make([]*Connection, len(cfg.Connections))
+		for i, conn := range cfg.Connections {
+			cfgCopy.Connections[i] = conn.DeepCopy()
+		}
+	}
+
+	return cfgCopy
+}

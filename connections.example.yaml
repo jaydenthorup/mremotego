@@ -1,0 +1,77 @@
+version: "1.0"
+connections:
+  # Example SSH connection with plain text password
+  - name: Example SSH Server
+    type: connection
+    protocol: ssh
+    host: example.com
+    port: 22
+    username: admin
+    password: your-password-here
+    description: Example SSH connection
+
+  # Example SSH connection with 1Password reference
+  - name: Production Server
+    type: connection
+    protocol: ssh
+    host: prod.example.com
+    port: 22
+    username: root
+    password: op://DevOps/prod-server/password
+    description: SSH to production server (password in 1Password)
+
+  # Example SSH connection with encrypted password
+  # (Run encrypt-passwords tool to encrypt your passwords)
+  - name: Encrypted SSH
+    type: connection
+    protocol: ssh
+    host: secure.example.com
+    port: 22
+    username: admin
+    password: enc:base64encodedencrypteddata...
+    description: SSH with encrypted password
+
+  # Example RDP connection
+  - name: Windows Server
+    type: connection
+    protocol: rdp
+    host: win-server.example.com
+    port: 3389
+    username: Administrator
+    password: your-password-here
+    domain: MYDOMAIN
+    resolution: 1920x1080
+    color_depth: 32
+    description: Remote Desktop to Windows server
+
+  # Example VNC connection
+  - name: VNC Server
+    type: connection
+    protocol: vnc
+    host: vnc.example.com
+    port: 5900
+    password: your-vnc-password
+    description: VNC connection
+
+  # Example folder organization
+  - name: Development Servers
+    type: folder
+    description: All development environment servers
+    children:
+      - name: Dev Database
+        type: connection
+        protocol: ssh
+        host: dev-db.example.com
+        port: 22
+        username: dbadmin
+        password: op://DevOps/dev-db/password
+        description: Development database server
+
+      - name: Dev Web Server
+        type: connection
+        protocol: ssh
+        host: dev-web.example.com
+        port: 22
+        username: webadmin
+        password: op://DevOps/dev-web/password
+        description: Development web server

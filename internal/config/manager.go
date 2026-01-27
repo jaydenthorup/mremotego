@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/yourusername/mremotego/internal/crypto"
 	"github.com/yourusername/mremotego/internal/secrets"
 	"github.com/yourusername/mremotego/pkg/models"
 	"gopkg.in/yaml.v3"
@@ -16,6 +17,7 @@ type Manager struct {
 	configPath          string
 	config              *models.Config
 	onePasswordProvider *secrets.OnePasswordProvider
+	encryptionProvider  *crypto.EncryptionProvider
 }
 
 // NewManager creates a new configuration manager
@@ -23,8 +25,20 @@ func NewManager(configPath string) *Manager {
 	return &Manager{
 		configPath:          configPath,
 		onePasswordProvider: secrets.NewOnePasswordProvider(),
+		encryptionProvider:  nil, // Will be set when master password is provided
 	}
 }
+
+// SetMasterPassword sets the master password for encryption/decryption
+func (m *Manager) SetMasterPassword(password string) {
+	m.encryptionProvider = crypto.NewEncryptionProvider(password)
+}
+
+// GetConfigPath returns the current config file path
+func (m *Manager) GetConfigPath() string {
+	return m.configPath
+}
+
 
 // GetDefaultConfigPath returns the default configuration file path
 // It checks for a recent file first, then falls back to the default location
@@ -74,12 +88,43 @@ func (m *Manager) Load() error {
 		return fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// No decryption needed - 1Password references stay as-is, plain text stays as-is
+	// Decrypt passwords if encryption is enabled
+	if m.encryptionProvider != nil && m.encryptionProvider.IsEnabled() {
+		if err := m.decryptPasswords(&config); err != nil {
+			return fmt.Errorf("failed to decrypt passwords: %w", err)
+		}
+	}
+
 	m.config = &config
 
 	// Save this as the most recently used config file
 	m.saveRecentFile()
 
+	return nil
+}
+
+// decryptPasswords recursively decrypts all encrypted passwords in the config
+func (m *Manager) decryptPasswords(config *models.Config) error {
+	return m.decryptPasswordsRecursive(config.Connections)
+}
+
+func (m *Manager) decryptPasswordsRecursive(connections []*models.Connection) error {
+	for _, conn := range connections {
+		if conn.Password != "" && m.encryptionProvider.IsEncrypted(conn.Password) {
+			decrypted, err := m.encryptionProvider.Decrypt(conn.Password)
+			if err != nil {
+				return fmt.Errorf("failed to decrypt password for '%s': %w", conn.Name, err)
+			}
+			conn.Password = decrypted
+		}
+
+		// Recursively decrypt children
+		if conn.IsFolder() && len(conn.Children) > 0 {
+			if err := m.decryptPasswordsRecursive(conn.Children); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -95,9 +140,17 @@ func (m *Manager) Save() error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// No encryption needed - save config as-is
-	// 1Password references and plain text passwords are stored directly
-	data, err := yaml.Marshal(m.config)
+	// Create a copy for encryption (don't modify the in-memory config)
+	configCopy := m.config.DeepCopy()
+
+	// Encrypt passwords if encryption is enabled
+	if m.encryptionProvider != nil && m.encryptionProvider.IsEnabled() {
+		if err := m.encryptPasswords(configCopy); err != nil {
+			return fmt.Errorf("failed to encrypt passwords: %w", err)
+		}
+	}
+
+	data, err := yaml.Marshal(configCopy)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
@@ -106,6 +159,31 @@ func (m *Manager) Save() error {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
+	return nil
+}
+
+// encryptPasswords recursively encrypts all passwords that should be encrypted
+func (m *Manager) encryptPasswords(config *models.Config) error {
+	return m.encryptPasswordsRecursive(config.Connections)
+}
+
+func (m *Manager) encryptPasswordsRecursive(connections []*models.Connection) error {
+	for _, conn := range connections {
+		if m.encryptionProvider.ShouldEncrypt(conn.Password) {
+			encrypted, err := m.encryptionProvider.Encrypt(conn.Password)
+			if err != nil {
+				return fmt.Errorf("failed to encrypt password for '%s': %w", conn.Name, err)
+			}
+			conn.Password = encrypted
+		}
+
+		// Recursively encrypt children
+		if conn.IsFolder() && len(conn.Children) > 0 {
+			if err := m.encryptPasswordsRecursive(conn.Children); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
