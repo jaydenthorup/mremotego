@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/yourusername/mremotego/internal/secrets"
 	"github.com/yourusername/mremotego/pkg/models"
@@ -23,16 +22,6 @@ type Launcher struct {
 func NewLauncher() *Launcher {
 	return &Launcher{
 		onePasswordProvider: secrets.NewOnePasswordProvider(),
-	}
-}
-
-// hideConsoleWindow sets the command attributes to hide console windows on Windows
-func hideConsoleWindow(cmd *exec.Cmd) {
-	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			HideWindow:    true,
-			CreationFlags: 0x08000000, // CREATE_NO_WINDOW
-		}
 	}
 }
 
@@ -150,13 +139,88 @@ func (l *Launcher) launchSSHFallback(conn *models.Connection) error {
 		args = append(args, conn.ExtraArgs)
 	}
 
-	cmd := exec.Command("ssh", args...)
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	// Don't hide SSH - it needs a terminal window
+	var cmd *exec.Cmd
+
+	// If password is provided, try to use sshpass (if available)
+	if conn.Password != "" {
+		// Check if sshpass is available
+		if _, err := exec.LookPath("sshpass"); err == nil {
+			// Use sshpass to provide password
+			sshpassArgs := []string{"-p", conn.Password, "ssh"}
+			sshpassArgs = append(sshpassArgs, args...)
+
+			// Launch in a terminal emulator
+			cmd = l.launchInTerminal("sshpass", sshpassArgs...)
+		} else {
+			// sshpass not available, just use ssh (will prompt for password)
+			fmt.Println("Note: sshpass not found. Install with: sudo apt install sshpass")
+			fmt.Println("SSH will prompt for password interactively.")
+			cmd = l.launchInTerminal("ssh", args...)
+		}
+	} else {
+		cmd = l.launchInTerminal("ssh", args...)
+	}
+
+	if cmd == nil {
+		return fmt.Errorf("failed to create terminal command")
+	}
 
 	return cmd.Start()
+}
+
+// launchInTerminal launches a command in a terminal emulator
+func (l *Launcher) launchInTerminal(command string, args ...string) *exec.Cmd {
+	// Build full command string that keeps terminal open
+	cmdArgs := append([]string{command}, args...)
+	bashCmd := fmt.Sprintf("%s; echo ''; echo 'Press Enter to close...'; read", strings.Join(cmdArgs, " "))
+
+	if runtime.GOOS == "darwin" {
+		// macOS - use Terminal.app with osascript
+		// AppleScript to open Terminal and run command
+		script := fmt.Sprintf(`tell application "Terminal"
+			do script "%s"
+			activate
+		end tell`, strings.ReplaceAll(bashCmd, `"`, `\"`))
+
+		return exec.Command("osascript", "-e", script)
+	} else if runtime.GOOS == "linux" {
+		// Try common terminal emulators on Linux
+		terminals := []struct {
+			name     string
+			argStyle string // "dash-e", "dash-dash", "direct"
+		}{
+			{"gnome-terminal", "dash-dash"},
+			{"x-terminal-emulator", "dash-e"},
+			{"konsole", "dash-e"},
+			{"xfce4-terminal", "dash-e"},
+			{"xterm", "dash-e"},
+		}
+
+		for _, term := range terminals {
+			if termPath, err := exec.LookPath(term.name); err == nil {
+				fmt.Printf("Using terminal: %s\n", term.name)
+
+				switch term.argStyle {
+				case "dash-dash":
+					// gnome-terminal uses -- to separate
+					return exec.Command(termPath, "--", "bash", "-c", bashCmd)
+				case "dash-e":
+					// Most terminals use -e
+					return exec.Command(termPath, "-e", "bash", "-c", bashCmd)
+				}
+			}
+		}
+
+		fmt.Println("Warning: No terminal emulator found")
+	}
+
+	// Fallback: try to run without terminal (will need stdin/stdout)
+	fmt.Println("Fallback: Running without terminal")
+	cmd := exec.Command(command, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd
 }
 
 // launchRDP launches an RDP connection
@@ -193,8 +257,29 @@ func (l *Launcher) launchRDP(conn *models.Connection) error {
 		cmd = exec.Command("mstsc", rdpFile)
 		// Don't hide mstsc - it's a GUI application we want to see
 
-	case "linux", "darwin":
-		// Use xfreerdp on Linux/Mac
+	case "darwin":
+		// Use Microsoft Remote Desktop on macOS
+		// Format: rdp://[username@]hostname[:port]
+		rdpURL := "rdp://"
+		if conn.Username != "" {
+			rdpURL += conn.Username
+			if conn.Domain != "" {
+				rdpURL += "@" + conn.Domain
+			}
+			rdpURL += "@"
+		}
+		rdpURL += conn.Host
+		if port != 3389 {
+			rdpURL += fmt.Sprintf(":%d", port)
+		}
+
+		// Use 'open' to launch Microsoft Remote Desktop with rdp:// URL
+		cmd = exec.Command("open", rdpURL)
+		// Note: Password cannot be passed via URL for security reasons
+		// Microsoft Remote Desktop will prompt or use saved credentials
+
+	case "linux":
+		// Use xfreerdp on Linux
 		args := []string{
 			"/v:" + target,
 			"/cert:ignore",

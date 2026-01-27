@@ -8,14 +8,20 @@ if (!(Test-Path -Path "bin")) {
 }
 
 # Build the GUI application
-# -ldflags "-H windowsgui" prevents the console window from appearing
-go build -ldflags "-H windowsgui" -o bin/mremotego-gui.exe cmd/mremotego-gui/main.go cmd/mremotego-gui/theme.go
+# -ldflags "-H windowsgui" prevents the console window from appearing on Windows
+if ($IsWindows -or $env:OS -match "Windows") {
+    go build -ldflags "-H windowsgui" -o mremotego.exe cmd/mremotego-gui/main.go cmd/mremotego-gui/theme.go
+    $outputFile = "mremotego.exe"
+} else {
+    go build -o mremotego cmd/mremotego-gui/main.go cmd/mremotego-gui/theme.go
+    $outputFile = "mremotego"
+}
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "✓ Build successful: bin/mremotego-gui.exe" -ForegroundColor Green
+    Write-Host "✓ Build successful: $outputFile" -ForegroundColor Green
     
     # Show file size
-    $fileSize = (Get-Item "bin/mremotego-gui.exe").Length / 1MB
+    $fileSize = (Get-Item $outputFile).Length / 1MB
     Write-Host "File size: $([math]::Round($fileSize, 2)) MB" -ForegroundColor Cyan
 } else {
     Write-Host "✗ Build failed" -ForegroundColor Red

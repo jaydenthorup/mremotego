@@ -12,11 +12,16 @@ import (
 )
 
 func main() {
+	// Set locale to avoid warnings on non-standard systems
+	if os.Getenv("LANG") == "" || os.Getenv("LANG") == "C" {
+		os.Setenv("LANG", "en_US.UTF-8")
+	}
+
 	// Create Fyne application
 	myApp := app.NewWithID("com.mremotego.app")
 	myApp.Settings().SetTheme(&customTheme{})
 
-	// Set application icon
+	// Set application icon (ignore errors - icon is optional)
 	if icon := gui.GetAppIcon(); icon != nil {
 		myApp.SetIcon(icon)
 	}

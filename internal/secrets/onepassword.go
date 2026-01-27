@@ -3,9 +3,7 @@ package secrets
 import (
 	"fmt"
 	"os/exec"
-	"runtime"
 	"strings"
-	"syscall"
 )
 
 // OnePasswordProvider handles retrieving secrets from 1Password CLI
@@ -23,15 +21,7 @@ func NewOnePasswordProvider() *OnePasswordProvider {
 // isOnePasswordCLIAvailable checks if the 1Password CLI (op) is installed
 func isOnePasswordCLIAvailable() bool {
 	cmd := exec.Command("op", "--version")
-
-	// Hide console window on Windows
-	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			HideWindow:    true,
-			CreationFlags: 0x08000000, // CREATE_NO_WINDOW
-		}
-	}
-
+	hideConsoleWindow(cmd)
 	return cmd.Run() == nil
 }
 
@@ -60,14 +50,7 @@ func (p *OnePasswordProvider) ResolveSecret(reference string) (string, error) {
 	// Use 'op read' to retrieve the secret
 	// This will prompt for biometric auth if needed - don't pre-check authentication
 	cmd := exec.Command("op", "read", reference)
-
-	// Hide console window on Windows
-	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			HideWindow:    true,
-			CreationFlags: 0x08000000, // CREATE_NO_WINDOW
-		}
-	}
+	hideConsoleWindow(cmd)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -129,14 +112,7 @@ func (p *OnePasswordProvider) CreateItem(vault, title, username, password string
 	}
 
 	cmd := exec.Command("op", args...)
-
-	// Hide console window on Windows
-	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			HideWindow:    true,
-			CreationFlags: 0x08000000, // CREATE_NO_WINDOW
-		}
-	}
+	hideConsoleWindow(cmd)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -155,14 +131,7 @@ func (p *OnePasswordProvider) ListVaults() ([]string, error) {
 	}
 
 	cmd := exec.Command("op", "vault", "list", "--format=json")
-
-	// Hide console window on Windows
-	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			HideWindow:    true,
-			CreationFlags: 0x08000000, // CREATE_NO_WINDOW
-		}
-	}
+	hideConsoleWindow(cmd)
 
 	_, err := cmd.Output()
 	if err != nil {
