@@ -5,6 +5,12 @@
 *.so
 *.dylib
 
+# Compiled application binaries
+mremotego
+mremotego.exe
+encrypt-passwords
+encrypt-passwords.exe
+
 # Test binary, built with `go test -c`
 *.test
 
@@ -36,7 +42,3 @@ dist/
 connections.yaml
 config.yaml
 MremoteGO-Config.xml
-
-# Encryption tools
-encrypt-passwords
-encrypt-passwords.exe
