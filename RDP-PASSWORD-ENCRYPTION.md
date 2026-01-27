@@ -1,180 +1,183 @@
-# RDP Password Encryption - Technical Details
+# RDP Password Management - Technical Details
 
-## Current Status
+## Current Implementation
 
-**⚠️ KNOWN ISSUE**: RDP automatic password login is currently disabled due to compatibility issues with mstsc password format.
+MremoteGO uses **Windows Credential Manager** (cmdkey) for RDP password management, providing seamless auto-login without storing passwords in the config file.
 
-- RDP connections will **prompt for password** at connection time
-- Password is securely stored in YAML using DPAPI encryption
-- Technical issue: mstsc requires specific password encryption format that needs further investigation
-- See issue tracker for updates on automatic password login feature
+## How It Works
 
-## How It Was Designed to Work
+### 1. Password Storage (Windows Credential Manager)
 
-MremoteGO was designed to support **automatic RDP password login** using Windows Data Protection API (DPAPI), similar to mRemoteNG.
+When you connect to an RDP server with a password, MremoteGO:
 
-## Implementation Details
-
-### 1. Password Storage (Windows DPAPI)
-
-When you save an RDP connection with a password, MremoteGO:
-
-1. **Encrypts the password** using Windows `CryptProtectData` API
-   - Uses the current user's credentials as the encryption key
-   - Password can only be decrypted by the same user on the same machine
-   - No encryption keys stored in files
-
-2. **Stores encrypted password** in the YAML config:
-   ```yaml
-   - name: "Windows Server"
-     protocol: rdp
-     host: server.example.com
-     username: Administrator
-     password: "base64encodedencryptedpassword"  # DPAPI encrypted
+1. **Stores credentials** in Windows Credential Manager using `cmdkey`:
+   ```
+   cmdkey /generic:TERMSRV/hostname /user:username /pass:password
    ```
 
-3. **Creates temporary .rdp file** when connecting (currently without password):
-   ```ini
-   full address:s:server.example.com:3389
-   username:s:Administrator
-   password 51:b:base64encryptedpassword
+2. **Launches mstsc** which automatically retrieves credentials:
+   ```
+   mstsc /v:hostname:port
    ```
 
-4. **Launches mstsc** with the .rdp file
-   - Windows automatically decrypts and uses the password
+3. **Auto-login happens** - Windows uses stored credentials automatically
    - No password prompt needed
    - Seamless login experience
+   - Credentials persist until explicitly deleted
 
-### 2. Security
+### 2. 1Password Integration
+
+For secure team-shareable passwords, use 1Password references:
+
+```yaml
+- name: "Windows Server"
+  protocol: rdp
+  host: server.example.com
+  username: Administrator
+  password: op://Private/Windows Server/password  # 1Password reference
+```
+
+When connecting:
+1. MremoteGO calls `op read op://vault/item/field` via CLI
+2. 1Password authenticates using biometric unlock
+3. Password is retrieved and passed to Windows Credential Manager
+4. mstsc connects automatically
+
+See [1PASSWORD-CLI-SETUP.md](1PASSWORD-CLI-SETUP.md) for setup.
+
+### 3. Security
 
 **Key Security Features:**
 
-- ✅ **User-specific encryption** - Passwords encrypted per Windows user account
-- ✅ **Machine-specific** - Encrypted passwords only work on the machine where they were created
-- ✅ **No master password** - Uses Windows login credentials automatically
-- ✅ **Same as mRemoteNG** - Industry-standard DPAPI encryption
-- ✅ **Temporary files** - .rdp files created in `%TEMP%\mremotego\` and can be cleaned up
+- ✅ **Windows Credential Manager** - OS-level secure storage
+- ✅ **User-specific** - Credentials tied to Windows user account
+- ✅ **Machine-specific** - Only accessible on the machine where stored
+- ✅ **1Password integration** - Team-shareable passwords via op:// references
+- ✅ **No plaintext storage** - Passwords never stored in config files
+- ✅ **Biometric unlock** - 1Password uses Touch ID/Windows Hello
 
 **Important Security Notes:**
 
-⚠️ **Passwords are tied to your Windows user account**
-- If you copy the config to another machine, passwords won't decrypt
-- If you copy the config to another user account, passwords won't decrypt
-- This is by design for security
+⚠️ **Credentials are tied to your Windows user account**
+- Stored in Windows Credential Manager, not config files
+- If you copy the config to another machine, you can still connect (using 1Password)
+- Each machine stores its own local credentials cache
 
-⚠️ **Config file is still readable**
-- While passwords are encrypted, the base64 string is visible in YAML
-- Set appropriate file permissions: `icacls %APPDATA%\mremotego\config.yaml /inheritance:r /grant:r "%USERNAME%:F"`
+⚠️ **Config file security**
+- Plain text passwords: Not recommended (will be stored in Credential Manager on connect)
+- 1Password references: Safe to commit to git (actual passwords stay in 1Password)
 
 ⚠️ **Best Practices**
+- Use 1Password references (`op://`) for team-shared passwords
 - Use SSH keys instead of passwords when possible
 - Consider certificate-based RDP authentication for production
-- Store sensitive configs in encrypted filesystems or use BitLocker
 - Regular security audits of stored credentials
+- Clear credential cache: `cmdkey /delete:TERMSRV/hostname`
 
-### 3. Cross-Platform Behavior
+### 4. Cross-Platform Behavior
 
 **Windows:**
-- ✅ Full DPAPI encryption support
-- ✅ Automatic password login
-- ✅ Creates .rdp files with encrypted passwords
+- ✅ Windows Credential Manager for RDP auto-login
+- ✅ PuTTY for SSH with `-pw` flag
+- ✅ 1Password CLI integration
 
-**Linux/macOS:**
-- ⚠️ Passwords stored in plain YAML (xfreerdp limitation)
-- ✅ Passed directly to xfreerdp command line
-- 💡 Recommendation: Use SSH keys or certificate auth
+**Linux:**
+- ✅ xfreerdp with `/u:` and `/p:` flags
+- ✅ Native ssh client
+- ✅ 1Password CLI integration
 
-### 4. Example Usage
+**macOS:**
+- ✅ Microsoft Remote Desktop or xfreerdp
+- ✅ Native ssh client
+- ✅ 1Password CLI integration
 
+### 5. Example Usage
+
+**GUI:**
+1. Add new connection
+2. Enter password or 1Password reference: `op://Private/Server/password`
+3. Optional: Check "Store in 1Password" to save new passwords
+4. Connect - auto-login happens automatically
 **CLI:**
 ```bash
-# Add RDP connection with password
+# Add RDP connection with 1Password reference
 mremotego add --name "WinServer" \
   --protocol rdp \
   --host 192.168.1.100 \
   --username Administrator \
-  --password "MySecurePassword" \
-  --domain CORP
+  --password "op://Private/WinServer/password"
 
-# Connect (password automatically used)
+# Connect (password automatically retrieved from 1Password)
 mremotego connect "WinServer"
 ```
 
-**GUI:**
-1. Click **[+]** Add Connection
-2. Fill in details including password
-3. Click **Submit** - password is automatically encrypted
-4. Click **Connect** - automatic login, no password prompt
+### 6. Credential Management Commands
 
-### 5. Config File Example
-
-**Before encryption (internal, not visible):**
-```yaml
-password: "MySecurePassword"
+**View stored credentials:**
+```powershell
+cmdkey /list | Select-String "TERMSRV"
 ```
 
-**After encryption (what's stored):**
-```yaml
-password: "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAA5xK7V9..."
+**Manually delete credentials:**
+```powershell
+cmdkey /delete:TERMSRV/hostname
 ```
 
-The encrypted string is only decryptable by the same Windows user on the same machine.
+**Delete all RDP credentials:**
+```powershell
+cmdkey /list | Select-String "TERMSRV" | ForEach-Object { 
+  $target = ($_ -split " ")[1]
+  cmdkey /delete:$target
+}
+```
 
-### 6. Troubleshooting
+### 7. Troubleshooting
 
 **Password not working:**
-- Config file was copied from another machine → Re-enter passwords
-- Running as different Windows user → Re-enter passwords
-- Windows profile was recreated → Re-enter passwords
+- Check 1Password CLI is signed in: `op whoami`
+- Verify the op:// reference is correct
+- Ensure 1Password desktop app is running
+- Check "Integrate with 1Password CLI" is enabled in 1Password settings
 
-**Password prompts still appear:**
-- Windows may show security prompt first time
-- Check Windows Credential Manager
-- Verify .rdp file created in `%TEMP%\mremotego\`
+**RDP still prompts for password:**
+- Credentials may not be stored in Credential Manager yet
+- Connect once to store credentials
+- Check Windows Credential Manager for TERMSRV/hostname entry
 
-**Security warnings:**
-- Normal for untrusted certificates
-- Can be disabled in connection settings (not recommended for production)
-
-### 7. API Reference
-
-**Encryption Functions (Windows only):**
-
-```go
-// Encrypt password using Windows DPAPI
-encrypted, err := encryptPasswordWindows(password)
-
-// Decrypt password using Windows DPAPI
-decrypted, err := decryptPasswordWindows(encrypted)
-```
-
-**RDP File Creation:**
-```go
-// Creates temporary .rdp file with encrypted password
-rdpFile, err := createRDPFile(connection, target)
-```
+**1Password authentication fails:**
+- Sign in to 1Password desktop app
+- Enable biometric unlock in 1Password settings
+- Verify vault access permissions
 
 ## Comparison with mRemoteNG
 
 | Feature | mRemoteNG | MremoteGO |
 |---------|-----------|-----------|
-| Encryption Method | Windows DPAPI | Windows DPAPI ✅ |
-| Password Format | XML encrypted string | YAML base64 encrypted |
-| Storage Location | confCons.xml | config.yaml |
-| RDP File Creation | ✅ Temporary | ✅ Temporary |
+| Encryption Method | XML with master password | Windows Credential Manager |
+| Password Format | XML encrypted string | 1Password references or plain text |
+| Storage Location | confCons.xml | Windows Credential Manager |
+| RDP File Creation | ❌ Uses mstsc directly | ✅ Temporary .rdp files |
 | Auto-login | ✅ | ✅ |
+| Team Sharing | ❌ Difficult | ✅ 1Password integration |
 | Cross-platform | ❌ Windows only | ✅ Win/Linux/Mac |
 
-## Future Enhancements
+## Security Architecture
 
-Planned improvements:
-- [ ] Option to use Windows Credential Manager
-- [ ] Master password for additional encryption layer
-- [ ] SSH key management integration
-- [ ] Certificate-based authentication
-- [ ] Cleanup old .rdp files automatically
-- [ ] Audit log for password usage
+```
+Config File (git-shareable)
+├── Connections with op:// references
+└── No plaintext passwords
+
+Connection Flow:
+1. User clicks "Connect"
+2. MremoteGO detects op:// reference
+3. Calls: op read op://vault/item/field
+4. 1Password authenticates (biometric)
+5. Password retrieved securely
+6. Stored in Windows Credential Manager
+7. mstsc launches with auto-login
+```
 
 ---
 
-**Security Recommendation:** For production environments, consider using certificate-based or Kerberos authentication instead of passwords where possible.
+**Security Recommendation:** Use 1Password references (`op://`) for all passwords to enable secure team sharing and keep passwords out of config files.

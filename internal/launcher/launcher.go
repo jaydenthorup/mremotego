@@ -45,7 +45,19 @@ func (l *Launcher) Launch(conn *models.Connection) error {
 	// Resolve 1Password reference if needed (make a copy to avoid modifying the original)
 	resolvedConn := *conn
 	if l.onePasswordProvider.IsReference(conn.Password) {
-		resolvedConn.Password = l.onePasswordProvider.ResolveIfReference(conn.Password)
+		resolved, err := l.onePasswordProvider.ResolveSecret(conn.Password)
+		if err != nil {
+			// For RDP, we can continue without a password (will prompt)
+			// For other protocols that require a password, return the error
+			if conn.Protocol != models.ProtocolRDP {
+				return fmt.Errorf("failed to resolve password from 1Password: %w", err)
+			}
+			// RDP: Clear the password so it doesn't try to use the op:// reference
+			fmt.Printf("Warning: Failed to resolve password from 1Password: %v (RDP will prompt for credentials)\n", err)
+			resolvedConn.Password = ""
+		} else {
+			resolvedConn.Password = resolved
+		}
 	}
 
 	switch resolvedConn.Protocol {

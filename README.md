@@ -8,13 +8,16 @@ A Go implementation of mRemoteNG with git-compatible configuration files.
 
 ## Features
 
-- 🔐 Store connection information for multiple protocols (RDP, SSH, VNC, HTTP/HTTPS)
+- 🔐 Store connection information for multiple protocols (RDP, SSH, VNC, HTTP/HTTPS, Telnet)
 - 📁 Organize connections in folders/groups
 - 🔄 Git-friendly YAML configuration format (easy to diff and merge)
 - 🖥️ Cross-platform (Windows, Linux, macOS)
 - 💻 CLI and GUI interfaces
-- 🔒 Support for credential inheritance
+- 🔒 1Password integration for secure password storage
+- 🔑 RDP auto-login using Windows Credential Manager
+- 🎨 Custom application icon
 - 🚀 Fast and lightweight
+- 📂 Recent file tracking
 
 ## Screenshots
 
@@ -39,12 +42,18 @@ See [GUI-README.md](GUI-README.md) for GUI documentation.
 ### Quick Start (GUI)
 
 ```bash
-# Build GUI version
-go build -o mremotego-gui.exe cmd/mremotego-gui/main.go cmd/mremotego-gui/theme.go
+# Build GUI version (Windows with no console window)
+go build -ldflags "-H windowsgui" -o MremoteGO.exe ./cmd/mremotego-gui
 
 # Run
-.\mremotego-gui.exe
+.\MremoteGO.exe
 ```
+
+The GUI will automatically:
+- Create a default config at `%APPDATA%\mremotego\config.yaml`
+- Remember your last opened file
+- Support drag-and-drop connection organization
+- Hide console windows for background processes
 
 ### Quick Start (CLI)
 
@@ -128,34 +137,52 @@ connections:
         host: web1.prod.example.com
         port: 22
         username: deploy
+        password: op://Private/Web Server 1/password  # 1Password reference
         description: "Primary web server"
         
       - name: "Database Server"
         type: connection
-        protocol: ssh
-        host: db.prod.example.com
-        port: 22
-        username: dbadmin
-        
-  - name: "Windows Machines"
-    type: folder
-    children:
-      - name: "File Server"
-        type: connection
         protocol: rdp
-        host: files.example.com
+        host: db.prod.example.com
         port: 3389
         username: Administrator
-        domain: CORP
+        password: op://Private/DB Server/password  # Secure password storage
+        
+  - name: "Development"
+    type: folder
+    children:
+      - name: "Dev SSH"
+        type: connection
+        protocol: ssh
+        host: dev.example.com
+        port: 22
+        username: developer
+        password: plaintext_password_here  # Or plain text (not recommended)
 ```
+
+### 1Password Integration
+
+Store passwords securely in 1Password instead of config files:
+
+```yaml
+password: op://Private/Server Name/password
+```
+
+See [1PASSWORD-CLI-SETUP.md](1PASSWORD-CLI-SETUP.md) for setup instructions.
 
 ## Supported Protocols
 
-- **SSH**: Secure Shell connections
-- **RDP**: Remote Desktop Protocol (launches mstsc/xfreerdp)
-- **VNC**: Virtual Network Computing
-- **HTTP/HTTPS**: Web interfaces
+- **SSH**: Secure Shell connections (uses PuTTY on Windows, native ssh on Mac/Linux)
+- **RDP**: Remote Desktop Protocol (launches mstsc on Windows, xfreerdp on Linux)
+- **VNC**: Virtual Network Computing (launches vncviewer)
+- **HTTP/HTTPS**: Web interfaces (opens in default browser)
 - **Telnet**: Legacy telnet connections
+
+### Special Features
+
+- **RDP Auto-Login**: Passwords stored in Windows Credential Manager for seamless login
+- **1Password Integration**: Store passwords securely using `op://vault/item/field` references
+- **PuTTY on Windows**: SSH connections use PuTTY with password auto-fill support
 
 ## Git-Friendly Format
 
@@ -174,20 +201,28 @@ Unlike mRemoteNG's XML format, MremoteGO uses YAML which provides:
 ```
 mremotego/
 ├── cmd/
-│   └── mremotego/      # Main CLI application
+│   ├── mremotego/          # CLI application
+│   └── mremotego-gui/      # GUI application
 ├── internal/
-│   ├── config/         # Configuration management
-│   ├── connection/     # Connection handlers
-│   └── launcher/       # Protocol launchers
+│   ├── config/             # Configuration management
+│   ├── gui/                # GUI components (Fyne)
+│   ├── launcher/           # Protocol launchers
+│   └── secrets/            # 1Password integration
 ├── pkg/
-│   └── models/         # Data models
+│   └── models/             # Data models
+├── tools/
+│   └── generate_icon.go    # Icon generator
 └── go.mod
 ```
 
 ### Build
 
 ```bash
-go build -o mremotego cmd/mremotego/main.go
+# GUI with hidden console window (Windows)
+go build -ldflags "-H windowsgui" -o MremoteGO.exe ./cmd/mremotego-gui
+
+# CLI
+go build -o mremotego.exe ./cmd/mremotego
 ```
 
 ### Test

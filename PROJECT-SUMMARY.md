@@ -2,17 +2,41 @@
 
 ## What is MremoteGO?
 
-MremoteGO is a **complete reimplementation of mRemoteNG in Go** with a major improvement: **git-compatible configuration files**. Unlike mRemoteNG's XML format which is difficult to diff and merge, MremoteGO uses clean, human-readable YAML files that work perfectly with version control systems.
+MremoteGO is a **complete reimplementation of mRemoteNG in Go** with major improvements: **git-compatible configuration files** and **1Password integration**. Unlike mRemoteNG's XML format which is difficult to diff and merge, MremoteGO uses clean, human-readable YAML files that work perfectly with version control systems.
 
 ## Key Highlights
 
 ### 🎯 Two Interfaces, One Config
 
-- **GUI Application** (`mremotego-gui`) - Full graphical interface with tree view, similar to mRemoteNG
-- **CLI Application** (`mremotego`) - Command-line tool for automation and terminal workflows
+- **GUI Application** (`MremoteGO.exe`) - Full graphical interface with tree view, similar to mRemoteNG
+  - Custom application icon
+  - No console windows
+  - Recent file tracking
+  - File → Open Config menu
+- **CLI Application** (`mremotego.exe`) - Command-line tool for automation and terminal workflows
 - Both share the same YAML configuration file seamlessly!
 
-### 📝 Git-Friendly Configuration
+### � Secure Password Management
+
+**1Password Integration:**
+```yaml
+connections:
+  - name: "Production Server"
+    password: op://Private/Production Server/password  # Secure reference
+```
+
+- Store passwords in 1Password instead of config files
+- Perfect for team sharing - commit configs to git, keep passwords secure
+- Biometric unlock via 1Password desktop app
+- Automatic password resolution at connect time
+
+**RDP Auto-Login:**
+- Windows Credential Manager integration
+- No password prompts - automatic login
+- Credentials cached per machine
+- Works with both plain text and 1Password references
+
+### �📝 Git-Friendly Configuration
 
 **mRemoteNG (XML):**
 ```xml
@@ -28,22 +52,23 @@ connections:
     host: server1.com
     port: 22
     username: admin
+    password: op://Private/Server1/password  # 1Password reference
     description: "Production server"
 ```
 
 ### 🖥️ Cross-Platform
 
-- ✅ Windows
-- ✅ Linux  
-- ✅ macOS
+- ✅ Windows (PuTTY for SSH, mstsc for RDP)
+- ✅ Linux (native ssh, xfreerdp for RDP)
+- ✅ macOS (native ssh, Microsoft Remote Desktop)
 
 ### 🔌 Protocol Support
 
-- SSH
-- RDP (Remote Desktop)
-- VNC
-- HTTP/HTTPS
-- Telnet
+- **SSH** - Uses PuTTY on Windows with password auto-fill, native ssh elsewhere
+- **RDP** - Windows Credential Manager for auto-login
+- **VNC** - Launches vncviewer
+- **HTTP/HTTPS** - Opens in default browser
+- **Telnet** - Legacy terminal connections
 
 ## Project Structure
 
@@ -51,38 +76,45 @@ connections:
 mremotego/
 ├── cmd/
 │   ├── mremotego/          # CLI application
-│   │   ├── main.go
-│   │   └── cmd/            # CLI commands (add, list, connect, etc.)
+│   │   └── main.go
 │   └── mremotego-gui/      # GUI application
-│       ├── main.go
-│       └── theme.go
+│       └── main.go
 ├── internal/
 │   ├── config/             # Configuration management
-│   │   └── manager.go      # Load/save YAML config
-│   ├── gui/                # GUI components
-│   │   ├── mainwindow.go   # Main window with tree view
-│   │   └── dialogs.go      # Add/edit dialogs
-│   └── launcher/           # Protocol launchers
-│       └── launcher.go     # Launch SSH, RDP, VNC, etc.
+│   │   └── manager.go      # Load/save YAML config, recent file tracking
+│   ├── gui/                # GUI components (Fyne)
+│   │   ├── mainwindow.go   # Main window with tree view & menus
+│   │   ├── dialogs.go      # Add/edit dialogs with 1Password support
+│   │   └── icon.go         # Embedded application icon
+│   ├── launcher/           # Protocol launchers
+│   │   └── launcher.go     # Launch SSH, RDP, VNC with password handling
+│   └── secrets/            # 1Password integration
+│       └── onepassword.go  # 1Password CLI wrapper
 ├── pkg/
 │   └── models/             # Data models
 │       └── connection.go   # Connection & folder structs
-├── bin/                    # Built executables
-│   ├── mremotego.exe       # CLI version
-│   └── mremotego-gui.exe   # GUI version
+├── tools/
+│   └── generate_icon.go    # Icon generator script
+├── icon.svg                # Application icon source
+├── MremoteGO.exe           # GUI executable (built)
+├── mremotego.exe           # CLI executable (built)
 ├── config.example.yaml     # Example configuration
 ├── README.md               # Main documentation
 ├── GUI-README.md           # GUI-specific docs
 ├── QUICKSTART.md           # Quick start guide
+├── 1PASSWORD-CLI-SETUP.md  # 1Password setup guide
+├── RDP-PASSWORD-ENCRYPTION.md  # RDP auto-login details
 └── go.mod                  # Go dependencies
 ```
 
 ## Built With
 
-- **Language**: Go 1.21+
+- **Language**: Go 1.22+
 - **GUI Framework**: Fyne v2.7.2 (cross-platform GUI toolkit)
 - **CLI Framework**: Cobra v1.8.0 (CLI commands)
 - **Config Format**: YAML v3 (human-readable, git-friendly)
+- **Security**: 1Password CLI for password management
+- **Windows Integration**: Credential Manager (cmdkey) for RDP auto-login
 
 ## Use Cases
 

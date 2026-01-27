@@ -4,40 +4,39 @@ MremoteGO supports storing passwords in 1Password and referencing them in your c
 
 ## Prerequisites
 
-1. Install [1Password CLI](https://developer.1password.com/docs/cli/get-started/)
-2. Sign in to 1Password CLI: `op signin`
-3. **Enable biometric unlock** (recommended for persistent sessions)
+1. Install [1Password desktop app](https://1password.com/downloads)
+2. Install [1Password CLI](https://developer.1password.com/docs/cli/get-started/)
+3. Sign in to 1Password desktop app
+4. **Enable CLI integration** in 1Password Settings → Developer
 
-## Setup for Persistent Sessions
+## Setup
 
-To avoid having to authenticate repeatedly, configure 1Password CLI for persistent sessions:
+### Windows Setup
 
-### Windows (Recommended Setup)
-
-1. **Sign in with biometric unlock enabled:**
+1. **Install 1Password CLI:**
    ```powershell
-   op signin
+   winget install 1Password.CLI
    ```
 
-2. **Turn on 1Password app integration:**
+2. **Enable 1Password app integration:**
    - Open 1Password app
    - Go to Settings → Developer
-   - Enable "Connect with 1Password CLI"
-   - Enable "Integrate with 1Password app"
+   - Enable "Integrate with 1Password CLI"
 
 3. **Verify integration:**
    ```powershell
-   op account list
-   op vault list
+   op --version
+   op whoami  # Should show your account after desktop app auth
    ```
 
-With this setup, 1Password CLI will use your existing 1Password app session and biometric unlock. No need to enter passwords repeatedly!
+With this setup, the CLI uses your 1Password desktop app session with biometric unlock. No separate CLI authentication needed!
 
-### Session Duration
+### How It Works
 
-- **With app integration**: Session lasts as long as your 1Password app is unlocked
-- **Without app integration**: Session expires after inactivity (default: 30 minutes)
-- **Biometric unlock**: Touch ID/Windows Hello unlocks CLI automatically
+- **Desktop app integration**: CLI talks to the 1Password app running on your system
+- **Biometric unlock**: Touch ID, Face ID, or Windows Hello unlocks everything
+- **No console windows**: MremoteGO hides all CLI process windows
+- **Persistent sessions**: As long as 1Password app is unlocked, CLI works seamlessly
 
 ## Usage
 

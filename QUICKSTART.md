@@ -4,29 +4,77 @@ This guide will help you get started with MremoteGO in just a few minutes.
 
 ## Installation
 
-### From Source
+### GUI Version (Recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/mremotego
 cd mremotego
 
-# Build the application
-go build -o mremotego cmd/mremotego/main.go
+# Build the GUI application (Windows - no console window)
+go build -ldflags "-H windowsgui" -o MremoteGO.exe ./cmd/mremotego-gui
 
-# (Optional) Move to a directory in your PATH
-# Linux/Mac:
-sudo mv mremotego /usr/local/bin/
-# Windows: Move to a directory in your PATH or use full path
+# Run the application
+.\MremoteGO.exe
 ```
 
-### Using Go Install
+### CLI Version
 
 ```bash
-go install github.com/yourusername/mremotego@latest
+# Build the CLI application
+go build -o mremotego.exe ./cmd/mremotego
+
+# Run
+.\mremotego.exe --help
 ```
 
-## First Steps
+## First Steps (GUI)
+
+### 1. Launch the Application
+
+Double-click `MremoteGO.exe`. The application will:
+- Create a default config at `%APPDATA%\mremotego\config.yaml`
+- Show the main window with connection tree
+- Remember your last opened file
+
+### 2. Add a New Connection
+
+1. Click **[+]** Add Connection button
+2. Fill in the connection details:
+   - **Name**: My Server
+   - **Protocol**: SSH
+   - **Host**: 192.168.1.100
+   - **Port**: 22 (default)
+   - **Username**: admin
+   - **Password**: your_password or `op://Private/MyServer/password`
+3. Click **Submit**
+
+### 3. Connect
+
+1. Select the connection in the tree
+2. Click **[▶]** Connect button
+3. The connection launches automatically with auto-login
+
+### 4. Use 1Password (Optional but Recommended)
+
+For secure team-shareable passwords:
+
+1. Install [1Password desktop app](https://1password.com/downloads)
+2. Install [1Password CLI](https://developer.1password.com/docs/cli/get-started/)
+3. Enable "Integrate with 1Password CLI" in 1Password Settings → Developer
+4. In MremoteGO, use password format: `op://vault-name/item-name/password`
+5. Optional: Check "Store in 1Password" when creating connections
+
+See [1PASSWORD-CLI-SETUP.md](1PASSWORD-CLI-SETUP.md) for details.
+
+### 5. Open Config Files
+
+Use **File → Open Config...** to load different configuration files:
+- Perfect for separating work/personal connections
+- Share configs via git (passwords stored in 1Password)
+- MremoteGO remembers your last opened file
+
+## First Steps (CLI)
 
 ### 1. Initialize Configuration
 
