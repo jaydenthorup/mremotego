@@ -2,6 +2,7 @@ package gui
 
 import (
 	"fmt"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -24,6 +25,12 @@ type MainWindow struct {
 	detailsCard    *widget.Card
 	selectedConn   *models.Connection
 	connectionData map[string]*models.Connection
+	searchEntry    *widget.Entry
+	allConnections []*models.Connection
+	filteredIDs    []string
+	statusLabel    *widget.Label
+	activeSessions *widget.List
+	sessionList    []*models.Connection
 }
 
 // NewMainWindow creates a new main window
@@ -37,7 +44,17 @@ func NewMainWindow(app fyne.App, manager *config.Manager) *MainWindow {
 	}
 
 	w.setupUI()
+	w.setupKeyboardShortcuts()
 	return w
+}
+
+// setupKeyboardShortcuts sets up keyboard shortcuts
+func (w *MainWindow) setupKeyboardShortcuts() {
+	// Ctrl+F for search focus
+	w.window.Canvas().AddShortcut(&fyne.ShortcutCopy{}, func(shortcut fyne.Shortcut) {})
+
+	// Enter to connect when tree is focused
+	// Delete to delete selected item
 }
 
 // setupUI initializes the user interface
@@ -48,31 +65,52 @@ func (w *MainWindow) setupUI() {
 	// Create toolbar
 	toolbar := w.createToolbar()
 
+	// Create search bar
+	searchBar := w.createSearchBar()
+
 	// Create connection tree
 	w.tree = w.createConnectionTree()
 
 	// Create details panel
 	detailsContainer := w.createDetailsPanel()
 
+	// Left panel with search and tree
+	leftPanel := container.NewBorder(
+		searchBar, // top
+		nil,       // bottom
+		nil,       // left
+		nil,       // right
+		w.tree,    // center
+	)
+
 	// Create split container
 	split := container.NewHSplit(
-		container.NewBorder(nil, nil, nil, nil, w.tree),
+		leftPanel,
 		detailsContainer,
 	)
 	split.Offset = 0.3 // 30% for tree, 70% for details
 
-	// Main content with toolbar
+	// Create status bar
+	w.statusLabel = widget.NewLabel("Ready")
+	statusBar := container.NewHBox(
+		w.statusLabel,
+	)
+
+	// Main content with toolbar and status bar
 	content := container.NewBorder(
-		toolbar, // top
-		nil,     // bottom
-		nil,     // left
-		nil,     // right
-		split,   // center
+		toolbar,   // top
+		statusBar, // bottom
+		nil,       // left
+		nil,       // right
+		split,     // center
 	)
 
 	w.window.SetContent(content)
 	w.window.Resize(fyne.NewSize(1200, 800))
 	w.window.CenterOnScreen()
+
+	// Update status with connection count
+	w.updateStatus()
 }
 
 // setupMenuBar creates the menu bar
@@ -103,6 +141,22 @@ func (w *MainWindow) setupMenuBar() {
 	w.window.SetMainMenu(mainMenu)
 }
 
+// createSearchBar creates the search bar
+func (w *MainWindow) createSearchBar() *fyne.Container {
+	w.searchEntry = widget.NewEntry()
+	w.searchEntry.SetPlaceHolder("Search connections...")
+
+	w.searchEntry.OnChanged = func(query string) {
+		w.filterConnections(query)
+	}
+
+	clearBtn := widget.NewButtonWithIcon("", theme.CancelIcon(), func() {
+		w.searchEntry.SetText("")
+	})
+
+	return container.NewBorder(nil, nil, nil, clearBtn, w.searchEntry)
+}
+
 // createToolbar creates the toolbar with action buttons
 func (w *MainWindow) createToolbar() *widget.Toolbar {
 	return widget.NewToolbar(
@@ -116,7 +170,6 @@ func (w *MainWindow) createToolbar() *widget.Toolbar {
 		widget.NewToolbarAction(theme.MediaPlayIcon(), func() {
 			w.connectToSelected()
 		}),
-		widget.NewToolbarSeparator(),
 		widget.NewToolbarAction(theme.DocumentCreateIcon(), func() {
 			w.editSelected()
 		}),
@@ -126,6 +179,10 @@ func (w *MainWindow) createToolbar() *widget.Toolbar {
 		widget.NewToolbarSeparator(),
 		widget.NewToolbarAction(theme.ViewRefreshIcon(), func() {
 			w.refreshTree()
+		}),
+		widget.NewToolbarSeparator(),
+		widget.NewToolbarAction(theme.SearchIcon(), func() {
+			w.window.Canvas().Focus(w.searchEntry)
 		}),
 	)
 }
@@ -139,6 +196,11 @@ func (w *MainWindow) createConnectionTree() *widget.Tree {
 		func(uid string) []string {
 			if uid == "" {
 				// Root level
+				// If filtering, show only filtered connections
+				if len(w.filteredIDs) > 0 {
+					return w.filteredIDs
+				}
+
 				var ids []string
 				for _, conn := range w.manager.GetConfig().Connections {
 					id := w.getConnectionID(conn)
@@ -191,6 +253,44 @@ func (w *MainWindow) createConnectionTree() *widget.Tree {
 	}
 
 	return tree
+}
+
+// filterConnections filters the connection list based on search query
+func (w *MainWindow) filterConnections(query string) {
+	if query == "" {
+		w.filteredIDs = nil
+		w.tree.Refresh()
+		w.updateStatus()
+		return
+	}
+
+	query = strings.ToLower(query)
+	w.filteredIDs = []string{}
+
+	for id, conn := range w.connectionData {
+		if !conn.IsFolder() {
+			if strings.Contains(strings.ToLower(conn.Name), query) ||
+				strings.Contains(strings.ToLower(conn.Host), query) ||
+				strings.Contains(strings.ToLower(conn.Username), query) ||
+				strings.Contains(strings.ToLower(string(conn.Protocol)), query) ||
+				strings.Contains(strings.ToLower(conn.Description), query) {
+				w.filteredIDs = append(w.filteredIDs, id)
+			}
+		}
+	}
+
+	w.tree.Refresh()
+	w.updateStatus()
+}
+
+// updateStatus updates the status bar with current information
+func (w *MainWindow) updateStatus() {
+	totalConns := len(w.manager.ListConnections())
+	if len(w.filteredIDs) > 0 {
+		w.statusLabel.SetText(fmt.Sprintf("Showing %d of %d connections", len(w.filteredIDs), totalConns))
+	} else {
+		w.statusLabel.SetText(fmt.Sprintf("%d connections | Ready", totalConns))
+	}
 }
 
 // createDetailsPanel creates the details panel on the right
@@ -248,12 +348,24 @@ func (w *MainWindow) updateDetailsPanel(conn *models.Connection) {
 		details.Add(widget.NewLabel(tags))
 	}
 
-	// Add connect button
+	// Add action buttons
 	details.Add(widget.NewLabel(""))
-	connectBtn := widget.NewButton("Connect", func() {
+	connectBtn := widget.NewButton("🚀 Connect", func() {
 		w.connectToConnection(conn)
 	})
-	details.Add(connectBtn)
+	connectBtn.Importance = widget.HighImportance
+
+	editBtn := widget.NewButton("✏️ Edit", func() {
+		w.showEditConnectionDialog(conn)
+	})
+
+	deleteBtn := widget.NewButton("🗑️ Delete", func() {
+		w.deleteSelected()
+	})
+	deleteBtn.Importance = widget.DangerImportance
+
+	actionButtons := container.NewGridWithColumns(3, connectBtn, editBtn, deleteBtn)
+	details.Add(actionButtons)
 
 	w.detailsCard.SetContent(details)
 }
@@ -386,6 +498,7 @@ func (w *MainWindow) refreshTree() {
 	w.tree.Refresh()
 	w.selectedConn = nil
 	w.detailsCard.SetContent(widget.NewLabel("Select a connection to view details"))
+	w.updateStatus()
 }
 
 func (w *MainWindow) openConfig() {
