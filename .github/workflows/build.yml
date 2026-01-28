@@ -26,14 +26,14 @@ jobs:
             goos: windows
             goarch: amd64
             name: mremotego-windows-amd64.exe
-          - os: macos-13
-            goos: darwin
-            goarch: amd64
-            name: mremotego-darwin-amd64
-          - os: macos-latest
+          - os: macos-14
             goos: darwin
             goarch: arm64
             name: mremotego-darwin-arm64
+          - os: macos-12
+            goos: darwin
+            goarch: amd64
+            name: mremotego-darwin-amd64
 
     steps:
     - name: Checkout code
