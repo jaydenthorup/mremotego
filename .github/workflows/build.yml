@@ -48,9 +48,24 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
         if [ "${{ matrix.goarch }}" = "arm64" ]; then
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          # Add ARM64 architecture
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update
+          # Install ARM64 cross-compilation tools
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          # Install ARM64 libraries
+          sudo apt-get install -y \
+            libgl1-mesa-dev:arm64 \
+            libx11-dev:arm64 \
+            libxrandr-dev:arm64 \
+            libxxf86vm-dev:arm64 \
+            libxi-dev:arm64 \
+            libxcursor-dev:arm64 \
+            libxinerama-dev:arm64
+        else
+          # Install AMD64 libraries
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
         fi
 
     - name: Build (Windows)
@@ -74,6 +89,8 @@ jobs:
         GOOS: linux
         GOARCH: arm64
         CC: aarch64-linux-gnu-gcc
+        CXX: aarch64-linux-gnu-g++
+        PKG_CONFIG_PATH: /usr/lib/aarch64-linux-gnu/pkgconfig
       run: |
         go build -o ${{ matrix.name }} ./cmd/mremotego-gui
 
