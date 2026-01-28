@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-01-28
+
+### Fixed
+- **Critical Fix**: 1Password references with special characters now work correctly
+- Changed from `op read` to `op item get` for better special character handling
+- Item names with parentheses, brackets, and other special chars now resolve properly
+- Automatically decodes URL-encoded item names in references
+
+### Technical Details
+- `op://vault/(item)/field` references now work without encoding issues
+- More robust error messages when 1Password retrieval fails
+
 ## [1.0.3] - 2026-01-28
 
 ### Fixed
