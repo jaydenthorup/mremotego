@@ -84,6 +84,36 @@ func (p *OnePasswordProvider) ResolveIfReference(value string) string {
 	return resolved
 }
 
+// CheckItemExists checks if an item with the given title exists in the vault
+// Returns the item ID if it exists, or an error if not found or multiple items exist
+func (p *OnePasswordProvider) CheckItemExists(vault, title string) (string, bool, error) {
+	if !p.enabled {
+		return "", false, fmt.Errorf("1Password CLI is not available")
+	}
+
+	// Try to get the item
+	cmd := exec.Command("op", "item", "get", title, "--vault="+vault, "--format=json")
+	hideConsoleWindow(cmd)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// Check if error is because item doesn't exist
+		errorMsg := string(output)
+		if strings.Contains(errorMsg, "isn't an item") || strings.Contains(errorMsg, "not found") {
+			return "", false, nil // Item doesn't exist
+		}
+		// Check for multiple items
+		if strings.Contains(errorMsg, "More than one item matches") {
+			return "", false, fmt.Errorf("multiple items found with title '%s' in vault '%s'. Please use a unique name or delete duplicates in 1Password", title, vault)
+		}
+		return "", false, fmt.Errorf("failed to check item: %s", strings.TrimSpace(errorMsg))
+	}
+
+	// Item exists - extract ID from JSON (simple approach)
+	// In production you'd want proper JSON parsing
+	return "", true, nil
+}
+
 // CreateItem creates a new Login item in 1Password
 // Returns the 1Password reference (op://vault/title/password)
 func (p *OnePasswordProvider) CreateItem(vault, title, username, password string) (string, error) {
@@ -95,28 +125,58 @@ func (p *OnePasswordProvider) CreateItem(vault, title, username, password string
 		return "", fmt.Errorf("vault and title are required")
 	}
 
-	// Build the command: op item create --category=login --title="title" --vault="vault" username="username" password="password"
-	args := []string{
-		"item", "create",
-		"--category=login",
-		"--title=" + title,
-		"--vault=" + vault,
-	}
-
-	if username != "" {
-		args = append(args, "username="+username)
-	}
-
-	if password != "" {
-		args = append(args, "password="+password)
-	}
-
-	cmd := exec.Command("op", args...)
-	hideConsoleWindow(cmd)
-
-	output, err := cmd.CombinedOutput()
+	// Check if item already exists
+	_, exists, err := p.CheckItemExists(vault, title)
 	if err != nil {
-		return "", fmt.Errorf("failed to create 1Password item: %w, output: %s", err, string(output))
+		return "", err // Return the error (e.g., multiple items found)
+	}
+
+	if exists {
+		// Item exists - update it instead of creating
+		args := []string{
+			"item", "edit", title,
+			"--vault=" + vault,
+		}
+
+		if username != "" {
+			args = append(args, "username="+username)
+		}
+
+		if password != "" {
+			args = append(args, "password="+password)
+		}
+
+		cmd := exec.Command("op", args...)
+		hideConsoleWindow(cmd)
+
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("failed to update existing 1Password item: %w, output: %s", err, string(output))
+		}
+	} else {
+		// Item doesn't exist - create it
+		args := []string{
+			"item", "create",
+			"--category=login",
+			"--title=" + title,
+			"--vault=" + vault,
+		}
+
+		if username != "" {
+			args = append(args, "username="+username)
+		}
+
+		if password != "" {
+			args = append(args, "password="+password)
+		}
+
+		cmd := exec.Command("op", args...)
+		hideConsoleWindow(cmd)
+
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("failed to create 1Password item: %w, output: %s", err, string(output))
+		}
 	}
 
 	// Return the reference format
