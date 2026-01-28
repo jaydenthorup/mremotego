@@ -286,10 +286,12 @@ func (w *MainWindow) filterConnections(query string) {
 // updateStatus updates the status bar with current information
 func (w *MainWindow) updateStatus() {
 	totalConns := len(w.manager.ListConnections())
+	configPath := w.manager.GetConfigPath()
+
 	if len(w.filteredIDs) > 0 {
-		w.statusLabel.SetText(fmt.Sprintf("Showing %d of %d connections", len(w.filteredIDs), totalConns))
+		w.statusLabel.SetText(fmt.Sprintf("Showing %d of %d connections | %s", len(w.filteredIDs), totalConns, configPath))
 	} else {
-		w.statusLabel.SetText(fmt.Sprintf("%d connections | Ready", totalConns))
+		w.statusLabel.SetText(fmt.Sprintf("%d connections | %s", totalConns, configPath))
 	}
 }
 
