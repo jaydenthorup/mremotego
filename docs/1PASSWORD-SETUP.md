@@ -14,7 +14,7 @@ MremoteGO integrates with 1Password CLI to securely store and retrieve passwords
 # Download from https://1password.com/downloads
 
 # Install 1Password CLI
-winget install 1Password.CLI
+choco install op
 ```
 
 ### 2. Enable CLI Integration
@@ -28,6 +28,7 @@ winget install 1Password.CLI
 ```powershell
 # Check CLI is installed
 op --version
+Invoke-Expression $(op signin)
 
 # Check integration (should show your account after desktop app authenticates)
 op whoami
@@ -54,10 +55,10 @@ Reference format: `op://vault-name/item-name/field-name`
 
 ### Creating Items in 1Password
 
-**Option 1: Use the GUI**
+**Option 1: Use the GUI (Recommended)**
 1. Click **"Store in 1Password"** checkbox when adding/editing connections
 2. Select the vault
-3. MremoteGO creates the item automatically
+3. MremoteGO creates the item automatically and handles special characters
 
 **Option 2: Manual**
 1. Open 1Password desktop app
@@ -65,6 +66,10 @@ Reference format: `op://vault-name/item-name/field-name`
 3. Set the title to your server name
 4. Add username and password fields
 5. Use format: `op://vault-name/item-title/password` in MremoteGO
+
+**Note:** If your item name contains special characters like `()`, `[]`, or spaces, MremoteGO will automatically URL-encode them in the reference. For example:
+- Item: `Server (Production)` → Reference: `op://vault/Server%20%28Production%29/password`
+- The GUI handles this automatically when you use "Store in 1Password"
 
 ### Common Vaults
 

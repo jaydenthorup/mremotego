@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"fmt"
+	"net/url"
 	"os/exec"
 	"strings"
 )
@@ -179,8 +180,10 @@ func (p *OnePasswordProvider) CreateItem(vault, title, username, password string
 		}
 	}
 
-	// Return the reference format
-	reference := fmt.Sprintf("op://%s/%s/password", vault, title)
+	// Return the reference format with URL-encoded item name
+	// This handles special characters like parentheses, spaces, etc.
+	encodedTitle := url.PathEscape(title)
+	reference := fmt.Sprintf("op://%s/%s/password", vault, encodedTitle)
 	return reference, nil
 }
 
