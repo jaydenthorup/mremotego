@@ -10,9 +10,9 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
-	"github.com/yourusername/mremotego/cmd/mremotego/cmd"
-	"github.com/yourusername/mremotego/internal/config"
-	"github.com/yourusername/mremotego/internal/gui"
+	"github.com/jaydenthorup/mremotego/cmd/mremotego/cmd"
+	"github.com/jaydenthorup/mremotego/internal/config"
+	"github.com/jaydenthorup/mremotego/internal/gui"
 )
 
 func main() {

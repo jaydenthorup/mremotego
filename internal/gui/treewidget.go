@@ -4,7 +4,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
-	"github.com/yourusername/mremotego/pkg/models"
+	"github.com/jaydenthorup/mremotego/pkg/models"
 )
 
 // createContextMenu creates a context menu for the selected connection
@@ -36,9 +36,6 @@ func (w *MainWindow) createContextMenu(conn interface{}) *fyne.Container {
 		widget.NewSeparator(),
 		widget.NewButton("Edit", func() {
 			w.showEditConnectionDialog(c)
-		}),
-		widget.NewButton("Duplicate", func() {
-			// TODO: Implement duplicate
 		}),
 		widget.NewSeparator(),
 		widget.NewButton("Delete", func() {

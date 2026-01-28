@@ -1,4 +1,4 @@
-# MremoteGO# MremoteGO# MremoteGO# MremoteGO# MremoteGO
+# MremoteGO# MremoteGO# MremoteGO# MremoteGO# MremoteGO# MremoteGO
 
 
 
@@ -6,251 +6,505 @@
 
 
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)> A modern, cross-platform remote connection manager with git-friendly YAML configs and 1Password integration.
+[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)> A modern, cross-platform remote connection manager with git-friendly YAML configs and 1Password integration.
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-
-
-## Why MremoteGO?
-
-[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)> A modern, cross-platform remote connection manager with git-friendly YAML configs and 1Password integration.
-
-**The Problem**: mRemoteNG uses XML configs that are painful to diff, merge, and share with teams. Passwords are awkwardly encrypted per-machine.
-
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
-**The Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus 1Password integration for secure team password sharing.
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](https://github.com/jaydenthorup/mremotego)
 
 
 
-## ✨ Features
+## Why MremoteGO?[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)> A modern, cross-platform remote connection manager with git-friendly YAML configs and 1Password integration.
 
-## Why MremoteGO?
 
-- 🎨 **Modern GUI** - Clean interface with connection tree, search, and quick actions
 
-- 🔐 **Password Encryption** - AES-256-GCM encryption at rest with master password[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)> A modern, cross-platform remote connection manager. Like mRemoteNG, but with git-friendly YAML configs and 1Password integration.A modern, cross-platform remote connection manager written in Go. Think mRemoteNG, but with git-friendly YAML configs and 1Password integration.
+**The Problem**: mRemoteNG uses XML configs that are painful to diff, merge, and share with teams. Passwords are awkwardly encrypted per-machine.[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-- 🔑 **1Password Integration** - Store passwords securely using `op://` references
 
-- 📝 **Git-Friendly** - YAML configs are easy to diff, merge, and review**Problem**: mRemoteNG uses XML configs that are painful to diff, merge, and share with teams.
+
+**The Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus optional 1Password integration for secure team password sharing.
+
+
+
+## ✨ Features## Why MremoteGO?
+
+
+
+- 🎨 **Modern GUI** - Clean interface with connection tree, search, and quick actions[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)> A modern, cross-platform remote connection manager with git-friendly YAML configs and 1Password integration.
+
+- 🔐 **Password Encryption** - AES-256-GCM encryption at rest with master password
+
+- 🔑 **1Password Integration** - Store passwords securely using `op://` references**The Problem**: mRemoteNG uses XML configs that are painful to diff, merge, and share with teams. Passwords are awkwardly encrypted per-machine.
+
+- 📝 **Git-Friendly** - YAML configs are easy to diff, merge, and review
+
+- 🖥️ **Cross-Platform** - Windows, Linux, macOS (AMD64 & ARM64)[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+- ⚡ **Fast** - Native GUI with instant connections
+
+- 🚀 **Multiple Protocols** - SSH, RDP, VNC, HTTP/HTTPS, Telnet**The Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus 1Password integration for secure team password sharing.
+
+- 📁 **Organized** - Folders, drag-and-drop, search filtering
+
+- 🔒 **Auto-Login** - Credential manager integration for seamless connections
+
+
+
+## 🚀 Quick Start## ✨ Features
+
+
+
+### Download## Why MremoteGO?
+
+
+
+Download the latest release for your platform from the [Releases](https://github.com/jaydenthorup/mremotego/releases) page.- 🎨 **Modern GUI** - Clean interface with connection tree, search, and quick actions
+
+
+
+### Build from Source- 🔐 **Password Encryption** - AES-256-GCM encryption at rest with master password[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)> A modern, cross-platform remote connection manager. Like mRemoteNG, but with git-friendly YAML configs and 1Password integration.A modern, cross-platform remote connection manager written in Go. Think mRemoteNG, but with git-friendly YAML configs and 1Password integration.
+
+
+
+```bash- 🔑 **1Password Integration** - Store passwords securely using `op://` references
+
+# Clone the repository
+
+git clone https://github.com/jaydenthorup/mremotego.git- 📝 **Git-Friendly** - YAML configs are easy to diff, merge, and review**Problem**: mRemoteNG uses XML configs that are painful to diff, merge, and share with teams.
+
+cd mremotego
 
 - 🖥️ **Cross-Platform** - Windows, Linux, macOS
 
-- ⚡ **Fast** - No console window popups, instant connections[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+# Build (all platforms)
 
-- 🚀 **Multiple Protocols** - SSH, RDP, VNC, HTTP/HTTPS, Telnet
+go build -o mremotego ./cmd/mremotego-gui- ⚡ **Fast** - No console window popups, instant connections[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-- 📁 **Organized** - Folders, drag-and-drop, search filtering**Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus 1Password integration for secure password sharing.
 
-- 🔒 **Auto-Login** - Windows Credential Manager for RDP, password support for SSH
 
+# Or use platform-specific build scripts- 🚀 **Multiple Protocols** - SSH, RDP, VNC, HTTP/HTTPS, Telnet
 
+# Windows: .\build-gui.ps1
 
-## 🚀 Quick Start
-
-## ✨ Features
-
-### Installation
-
-## Why MremoteGO?
-
-```bash
-
-# Clone the repository- 🎨 **Modern GUI** - Clean interface with connection tree, search, and quick actions
-
-git clone https://github.com/jaydenthorup/mremotego.git
-
-cd mremotego- 🔐 **Password Encryption** - AES-256-GCM encryption at rest with master password[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://go.dev/)[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://go.dev/)
-
-
-
-# Build GUI (Windows - no console window)- 🔑 **1Password Integration** - Store passwords securely using `op://` references
-
-.\build-gui.ps1
-
-- 📝 **Git-Friendly** - YAML configs are easy to diff, merge, and review**Problem**: mRemoteNG uses XML configs that are painful to diff, merge, and share with teams.
-
-# Build GUI (Linux/Mac)
-
-./build-gui.sh- 🖥️ **Cross-Platform** - Windows, Linux, macOS
-
-
-
-# Run- ⚡ **Fast** - No console window popups, instant connections[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
-.\mremotego.exe
-
-```- 🚀 **Multiple Protocols** - SSH, RDP, VNC, HTTP/HTTPS, Telnet
-
-
-
-### First Use- 📁 **Organized** - Folders, drag-and-drop, search filtering**Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus 1Password integration for secure password sharing.
-
-
-
-1. Launch MremoteGO- 🔒 **Auto-Login** - Windows Credential Manager for RDP, password support for SSH
-
-2. Enter a master password (optional - for encryption)
-
-3. Click **[+]** to add a connection
-
-4. Fill in host details
-
-5. Click **[▶]** to connect## 🚀 Quick Start
-
-
-
-That's it! 🎉## ✨ Features
-
-
-
-## 📖 Documentation### Installation
-
-
-
-- [Quick Start Guide](docs/QUICKSTART.md) - Get started in 5 minutes## Why MremoteGO?## Why MremoteGO?
-
-- [GUI Guide](docs/GUI-GUIDE.md) - Complete GUI reference
-
-- [Encryption Guide](docs/ENCRYPTION.md) - Password encryption details```bash
-
-- [1Password Setup](docs/1PASSWORD-SETUP.md) - Secure password management
-
-- [Password Management](docs/PASSWORD-MANAGEMENT.md) - Security best practices# Clone the repository- 🎨 **Modern GUI** - Clean interface with connection tree, search, and quick actions
-
-
-
-## 🔐 Password Storage Optionsgit clone https://github.com/jaydenthorup/mremotego.git
-
-
-
-MremoteGO supports three ways to store passwords:cd mremotego- 🔐 **Password Encryption** - AES-256-GCM encryption at rest with master password
-
-
-
-### 1. Encrypted (Recommended)
-
-
-
-```yaml# Build GUI (Windows - no console window)- 🔑 **1Password Integration** - Store passwords securely using `op://` references
-
-password: enc:AaBbCcDd...  # AES-256-GCM encrypted
-
-```.\build-gui.ps1
-
-
-
-- ✅ Secure at rest- 📝 **Git-Friendly** - YAML configs are easy to diff, merge, and review**The Problem**: mRemoteNG uses XML configs that are painful to diff, merge, and share with teams. Passwords are awkwardly encrypted per-machine.**Problem**: mRemoteNG uses XML configs that are painful to diff, merge, and share with teams.
-
-- ✅ Master password required to decrypt
-
-- ✅ Safe for personal use# Build GUI (Linux/Mac)
-
-
-
-### 2. 1Password Reference (Best for Teams)./build-gui.sh- 🖥️ **Cross-Platform** - Windows, Linux, macOS
-
-
-
-```yaml
-
-password: op://DevOps/server01/password
-
-```# Run- ⚡ **Fast** - No console window popups, instant connections
-
-
-
-- ✅ Passwords never in config files.\mremotego.exe
-
-- ✅ Team sharing with access control
-
-- ✅ Biometric unlock```- 🚀 **Multiple Protocols** - SSH, RDP, VNC, HTTP/HTTPS, Telnet
-
-- ✅ Audit logs
-
-
-
-### 3. Plain Text (Not Recommended)
-
-### First Use- 📁 **Organized** - Folders, drag-and-drop, search filtering**The Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus 1Password integration for secure team password sharing.**Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus 1Password integration for secure password sharing.
-
-```yaml
-
-password: mypassword123
+# Linux/Mac: ./build-gui.sh- 📁 **Organized** - Folders, drag-and-drop, search filtering**Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus 1Password integration for secure password sharing.
 
 ```
 
-1. Launch MremoteGO- 🔒 **Auto-Login** - Windows Credential Manager for RDP, password support for SSH
+- 🔒 **Auto-Login** - Windows Credential Manager for RDP, password support for SSH
 
-- ⚠️ Visible in config file
-
-- ⚠️ Not safe to commit to git2. Enter a master password (optional - for encryption)
+### First Run
 
 
 
-## 📋 Configuration Example3. Click **[+]** to add a connection
+1. Launch `mremotego` (or `mremotego.exe` on Windows)
 
+2. Optionally set a master password for encryption## 🚀 Quick Start
 
+3. Create your first connection or import from mRemoteNG
 
-```yaml4. Fill in host details
+## ✨ Features
 
-version: "1.0"
+## 📖 Usage
 
-connections:5. Click **[▶]** to connect## 🚀 Quick Start
+### Installation
 
-  # SSH with encrypted password
+### Creating Connections
 
-  - name: Production Web Server
+## Why MremoteGO?
+
+**GUI Method:**
+
+1. Click **[+]** or press `Ctrl+N````bash
+
+2. Fill in connection details (name, protocol, host, credentials)
+
+3. Optionally push password to 1Password# Clone the repository- 🎨 **Modern GUI** - Clean interface with connection tree, search, and quick actions
+
+4. Click **Save**
+
+git clone https://github.com/jaydenthorup/mremotego.git
+
+**YAML Method:**
+
+```yamlcd mremotego- 🔐 **Password Encryption** - AES-256-GCM encryption at rest with master password[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://go.dev/)[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://go.dev/)
+
+connections:
+
+  - name: Production Server
 
     type: connection
 
-    protocol: sshThat's it! 🎉## Features### Key Features
+    protocol: ssh# Build GUI (Windows - no console window)- 🔑 **1Password Integration** - Store passwords securely using `op://` references
 
-    host: web1.prod.com
+    host: prod.example.com
 
-    port: 22
+    port: 22.\build-gui.ps1
 
     username: admin
 
-    password: enc:base64encrypteddata...## 📖 Documentation### Installation
+    password: op://DevOps/prod-server/password  # 1Password reference- 📝 **Git-Friendly** - YAML configs are easy to diff, merge, and review**Problem**: mRemoteNG uses XML configs that are painful to diff, merge, and share with teams.
 
-    description: Primary web server
+    
+
+  - name: Dev Folder# Build GUI (Linux/Mac)
+
+    type: folder
+
+    children:./build-gui.sh- 🖥️ **Cross-Platform** - Windows, Linux, macOS
+
+      - name: Dev Server
+
+        type: connection
+
+        protocol: rdp
+
+        host: dev.example.com# Run- ⚡ **Fast** - No console window popups, instant connections[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+        username: developer
+
+        password: encrypted:AES256:...  # Encrypted with master password.\mremotego.exe
+
+```
+
+```- 🚀 **Multiple Protocols** - SSH, RDP, VNC, HTTP/HTTPS, Telnet
+
+### Connecting
 
 
 
-  # RDP with 1Password reference
+- **Double-click** a connection in the tree
 
-  - name: Windows Server- [Quick Start Guide](docs/QUICKSTART.md) - Get started in 5 minutes
+- **Right-click** → **Connect**### First Use- 📁 **Organized** - Folders, drag-and-drop, search filtering**Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus 1Password integration for secure password sharing.
 
-    type: connection
-
-    protocol: rdp- [GUI Guide](docs/GUI-GUIDE.md) - Complete GUI reference
-
-    host: win.prod.com
-
-    port: 3389- [Encryption Guide](docs/ENCRYPTION.md) - Password encryption details```bash
-
-    username: Administrator
-
-    password: op://DevOps/windows-server/password- [1Password Setup](docs/1PASSWORD-SETUP.md) - Secure password management
-
-    domain: MYDOMAIN
-
-    resolution: 1920x1080- [Password Management](docs/PASSWORD-MANAGEMENT.md) - Security best practices# Clone the repository- 🎨 **Modern GUI** - Clean interface with connection tree, drag-and-drop organization- 🎨 **Modern GUI** - Clean interface with connection tree and quick actions
+- Select and press **Enter**
 
 
 
-  # Organized in folders
+### Searching
 
-  - name: Development
+1. Launch MremoteGO- 🔒 **Auto-Login** - Windows Credential Manager for RDP, password support for SSH
 
-    type: folder## 🔐 Password Storage Optionsgit clone https://github.com/jaydenthorup/mremotego.git
+- Use the search box at the top
+
+- Filter by connection name, host, or protocol2. Enter a master password (optional - for encryption)
+
+- Results update in real-time
+
+3. Click **[+]** to add a connection
+
+### Command Line
+
+4. Fill in host details
+
+MremoteGO also supports CLI mode:
+
+5. Click **[▶]** to connect## 🚀 Quick Start
+
+```bash
+
+# List all connections
+
+mremotego list
+
+That's it! 🎉## ✨ Features
+
+# Connect to a specific host
+
+mremotego connect "Production Server"
+
+
+
+# Export connections## 📖 Documentation### Installation
+
+mremotego export --output connections-backup.yaml
+
+
+
+# Encrypt passwords in config
+
+mremotego-encrypt- [Quick Start Guide](docs/QUICKSTART.md) - Get started in 5 minutes## Why MremoteGO?## Why MremoteGO?
+
+```
+
+- [GUI Guide](docs/GUI-GUIDE.md) - Complete GUI reference
+
+## 🔐 Security
+
+- [Encryption Guide](docs/ENCRYPTION.md) - Password encryption details```bash
+
+### Password Encryption
+
+- [1Password Setup](docs/1PASSWORD-SETUP.md) - Secure password management
+
+MremoteGO supports two password storage methods:
+
+- [Password Management](docs/PASSWORD-MANAGEMENT.md) - Security best practices# Clone the repository- 🎨 **Modern GUI** - Clean interface with connection tree, search, and quick actions
+
+1. **Encrypted** (recommended for local use):
+
+   - AES-256-GCM encryption with PBKDF2 key derivation
+
+   - Master password required on startup
+
+   - Passwords stored as `password: encrypted:AES256:...`## 🔐 Password Storage Optionsgit clone https://github.com/jaydenthorup/mremotego.git
+
+
+
+2. **1Password** (recommended for teams):
+
+   - Uses 1Password CLI for password resolution
+
+   - Store passwords as `password: op://Vault/Item/field`MremoteGO supports three ways to store passwords:cd mremotego- 🔐 **Password Encryption** - AES-256-GCM encryption at rest with master password
+
+   - Requires 1Password CLI installed and authenticated
+
+
+
+### SSH Host Keys
+
+### 1. Encrypted (Recommended)
+
+- **New hosts**: Automatically accepted on first connection (`StrictHostKeyChecking=accept-new`)
+
+- **Changed hosts**: Shows warning with clear instructions to verify and fix
+
+- **Known hosts**: Standard SSH verification
+
+```yaml# Build GUI (Windows - no console window)- 🔑 **1Password Integration** - Store passwords securely using `op://` references
+
+## 🔧 Configuration
+
+password: enc:AaBbCcDd...  # AES-256-GCM encrypted
+
+### Config File Location
+
+```.\build-gui.ps1
+
+- **Windows**: `%APPDATA%\mremotego\config.yaml` or `.\config.yaml`
+
+- **Linux/Mac**: `~/.config/mremotego/config.yaml` or `./config.yaml`
+
+
+
+### Example Config- ✅ Secure at rest- 📝 **Git-Friendly** - YAML configs are easy to diff, merge, and review**The Problem**: mRemoteNG uses XML configs that are painful to diff, merge, and share with teams. Passwords are awkwardly encrypted per-machine.**Problem**: mRemoteNG uses XML configs that are painful to diff, merge, and share with teams.
+
+
+
+```yaml- ✅ Master password required to decrypt
+
+connections:
+
+  - name: Infrastructure- ✅ Safe for personal use# Build GUI (Linux/Mac)
+
+    type: folder
 
     children:
 
+      - name: web-01
+
+        type: connection### 2. 1Password Reference (Best for Teams)./build-gui.sh- 🖥️ **Cross-Platform** - Windows, Linux, macOS
+
+        protocol: ssh
+
+        host: web-01.example.com
+
+        port: 22
+
+        username: admin```yaml
+
+        password: op://DevOps/web-01/password
+
+        password: op://DevOps/server01/password
+
+      - name: db-01
+
+        type: connection```# Run- ⚡ **Fast** - No console window popups, instant connections
+
+        protocol: ssh
+
+        host: db-01.example.com
+
+        port: 22
+
+        username: postgres- ✅ Passwords never in config files.\mremotego.exe
+
+        password: encrypted:AES256:base64encodeddata
+
+```- ✅ Team sharing with access control
+
+
+
+### Importing from mRemoteNG- ✅ Biometric unlock```- 🚀 **Multiple Protocols** - SSH, RDP, VNC, HTTP/HTTPS, Telnet
+
+
+
+Use the PowerShell conversion script:- ✅ Audit logs
+
+
+
+```powershell
+
+.\convert-mremoteng-to-yaml.ps1 -InputXml "confCons.xml" -OutputYaml "connections.yaml"
+
+```### 3. Plain Text (Not Recommended)
+
+
+
+## 📚 Documentation### First Use- 📁 **Organized** - Folders, drag-and-drop, search filtering**The Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus 1Password integration for secure team password sharing.**Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus 1Password integration for secure password sharing.
+
+
+
+- [Quick Start Guide](docs/QUICKSTART.md)```yaml
+
+- [Password Management](docs/PASSWORD-MANAGEMENT.md)
+
+- [1Password Setup](docs/1PASSWORD-SETUP.md)password: mypassword123
+
+- [Encryption Guide](docs/ENCRYPTION.md)
+
+- [GUI Guide](docs/GUI-GUIDE.md)```
+
+
+
+## 🛠️ Development1. Launch MremoteGO- 🔒 **Auto-Login** - Windows Credential Manager for RDP, password support for SSH
+
+
+
+### Prerequisites- ⚠️ Visible in config file
+
+
+
+- Go 1.23 or later- ⚠️ Not safe to commit to git2. Enter a master password (optional - for encryption)
+
+- Platform-specific requirements:
+
+  - **Windows**: Go toolchain (no additional dependencies)
+
+  - **Linux**: `libgl1-mesa-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev`
+
+  - **macOS**: Xcode command line tools## 📋 Configuration Example3. Click **[+]** to add a connection
+
+
+
+### Building
+
+
+
+```bash```yaml4. Fill in host details
+
+# Development build
+
+go build ./cmd/mremotego-guiversion: "1.0"
+
+
+
+# Release build (Windows)connections:5. Click **[▶]** to connect## 🚀 Quick Start
+
+go build -ldflags "-s -w" -o mremotego.exe ./cmd/mremotego-gui
+
+  # SSH with encrypted password
+
+# Cross-platform builds handled by GitHub Actions
+
+```  - name: Production Web Server
+
+
+
+### Project Structure    type: connection
+
+
+
+```    protocol: sshThat's it! 🎉## Features### Key Features
+
+mremotego/
+
+├── cmd/    host: web1.prod.com
+
+│   ├── mremotego-gui/    # GUI+CLI entry point
+
+│   ├── mremotego/        # CLI commands    port: 22
+
+│   └── encrypt-passwords/ # Password encryption tool
+
+├── internal/    username: admin
+
+│   ├── config/           # Config management
+
+│   ├── crypto/           # Encryption/decryption    password: enc:base64encrypteddata...## 📖 Documentation### Installation
+
+│   ├── gui/              # Fyne GUI components
+
+│   ├── launcher/         # Protocol launchers    description: Primary web server
+
+│   └── secrets/          # 1Password integration
+
+├── pkg/
+
+│   └── models/           # Data models
+
+└── docs/                 # Documentation  # RDP with 1Password reference
+
+```
+
+  - name: Windows Server- [Quick Start Guide](docs/QUICKSTART.md) - Get started in 5 minutes
+
+## 🤝 Contributing
+
+    type: connection
+
+Contributions are welcome! Please:
+
+    protocol: rdp- [GUI Guide](docs/GUI-GUIDE.md) - Complete GUI reference
+
+1. Fork the repository
+
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)    host: win.prod.com
+
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+
+4. Push to the branch (`git push origin feature/amazing-feature`)    port: 3389- [Encryption Guide](docs/ENCRYPTION.md) - Password encryption details```bash
+
+5. Open a Pull Request
+
+    username: Administrator
+
+## 📝 License
+
+    password: op://DevOps/windows-server/password- [1Password Setup](docs/1PASSWORD-SETUP.md) - Secure password management
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+    domain: MYDOMAIN
+
+## 🙏 Acknowledgments
+
+    resolution: 1920x1080- [Password Management](docs/PASSWORD-MANAGEMENT.md) - Security best practices# Clone the repository- 🎨 **Modern GUI** - Clean interface with connection tree, drag-and-drop organization- 🎨 **Modern GUI** - Clean interface with connection tree and quick actions
+
+- Inspired by [mRemoteNG](https://mremoteng.org/)
+
+- Built with [Fyne](https://fyne.io/) GUI framework
+
+- 1Password integration via [1Password CLI](https://developer.1password.com/docs/cli/)
+
+  # Organized in folders
+
+## 📬 Support
+
+  - name: Development
+
+- 🐛 [Report Issues](https://github.com/jaydenthorup/mremotego/issues)
+
+- 💬 [Discussions](https://github.com/jaydenthorup/mremotego/discussions)    type: folder## 🔐 Password Storage Optionsgit clone https://github.com/jaydenthorup/mremotego.git
+
+- 📧 [Contact](mailto:jayden.thorup@jayfiles.com)
+
+    children:
+
+---
+
       - name: Dev Database
+
+**Note**: This project is not affiliated with or endorsed by mRemoteNG.
 
         type: connection
 

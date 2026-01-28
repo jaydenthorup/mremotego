@@ -10,9 +10,9 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/yourusername/mremotego/internal/config"
-	"github.com/yourusername/mremotego/internal/launcher"
-	"github.com/yourusername/mremotego/pkg/models"
+	"github.com/jaydenthorup/mremotego/internal/config"
+	"github.com/jaydenthorup/mremotego/internal/launcher"
+	"github.com/jaydenthorup/mremotego/pkg/models"
 )
 
 // MainWindow represents the main application window

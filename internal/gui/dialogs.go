@@ -8,7 +8,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
-	"github.com/yourusername/mremotego/pkg/models"
+	"github.com/jaydenthorup/mremotego/pkg/models"
 )
 
 // showAddConnectionDialog shows the dialog to add a new connection

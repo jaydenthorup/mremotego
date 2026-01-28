@@ -9,7 +9,7 @@ Get started with MremoteGO in 5 minutes!
 1. **Download or Build**
    ```powershell
    # Clone repository
-   git clone https://github.com/yourusername/mremotego
+   git clone https://github.com/jaydenthorup/mremotego
    cd mremotego
    
    # Build GUI (no console window)

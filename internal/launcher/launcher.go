@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yourusername/mremotego/internal/secrets"
-	"github.com/yourusername/mremotego/pkg/models"
+	"github.com/jaydenthorup/mremotego/internal/secrets"
+	"github.com/jaydenthorup/mremotego/pkg/models"
 )
 
 // Launcher handles launching connections
@@ -126,6 +126,10 @@ func (l *Launcher) launchSSHFallback(conn *models.Connection) error {
 	// Add port
 	args = append(args, "-p", strconv.Itoa(port))
 
+	// Automatically accept new host keys (security note: this trusts on first use)
+	// This prevents the "authenticity of host" prompt from blocking connections
+	args = append(args, "-o", "StrictHostKeyChecking=accept-new")
+
 	// Add username if provided
 	target := conn.Host
 	if conn.Username != "" {
@@ -153,8 +157,6 @@ func (l *Launcher) launchSSHFallback(conn *models.Connection) error {
 			cmd = l.launchInTerminal("sshpass", sshpassArgs...)
 		} else {
 			// sshpass not available, just use ssh (will prompt for password)
-			fmt.Println("Note: sshpass not found. Install with: sudo apt install sshpass")
-			fmt.Println("SSH will prompt for password interactively.")
 			cmd = l.launchInTerminal("ssh", args...)
 		}
 	} else {
@@ -170,10 +172,67 @@ func (l *Launcher) launchSSHFallback(conn *models.Connection) error {
 
 // launchInTerminal launches a command in a terminal emulator
 func (l *Launcher) launchInTerminal(command string, args ...string) *exec.Cmd {
-	// Build full command string
-	// Add error handling: if command fails, show error and wait
-	cmdArgs := append([]string{command}, args...)
-	bashCmd := strings.Join(cmdArgs, " ") + ` || { echo ""; echo "Connection failed. Press Enter to close..."; read; }`
+	// Build the command with proper shell quoting
+	cmdParts := []string{command}
+	cmdParts = append(cmdParts, args...)
+
+	// Join command parts, using shell quoting for safety
+	var quotedParts []string
+	for _, part := range cmdParts {
+		// Use single quotes and escape any single quotes in the string
+		quotedParts = append(quotedParts, fmt.Sprintf("'%s'", strings.ReplaceAll(part, "'", "'\\''")))
+	}
+	fullCmd := strings.Join(quotedParts, " ")
+
+	// For SSH commands on Linux, wrap with error detection for host key changes
+	var wrappedCmd string
+	if runtime.GOOS == "linux" && (command == "ssh" || command == "sshpass") {
+		// Extract hostname from args for ssh-keygen -R
+		hostname := ""
+		for i, arg := range args {
+			if !strings.HasPrefix(arg, "-") && i > 0 {
+				// This is likely the hostname or user@hostname
+				parts := strings.Split(arg, "@")
+				if len(parts) > 1 {
+					hostname = parts[1]
+				} else {
+					hostname = arg
+				}
+				break
+			}
+		}
+
+		// Create wrapper that detects host key mismatch and shows helpful message
+		// Use a temp file to capture stderr for error detection
+		wrappedCmd = fmt.Sprintf(`
+			tmpfile=$(mktemp)
+			%s 2>&1 | tee "$tmpfile"
+			exit_code=${PIPESTATUS[0]}
+			
+			if [ $exit_code -ne 0 ]; then
+				if grep -q "REMOTE HOST IDENTIFICATION HAS CHANGED" "$tmpfile"; then
+					echo ""
+					echo -e "\033[1;31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+					echo -e "\033[1;31m  WARNING: HOST KEY HAS CHANGED FOR %s\033[0m"
+					echo -e "\033[1;31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+					echo ""
+					echo "This could mean:"
+					echo "  1. The server was reinstalled (normal)"
+					echo "  2. Someone is intercepting your connection (security risk)"
+					echo ""
+					echo -e "\033[1;33mTo fix this, run:\033[0m"
+					echo -e "\033[1;36m  ssh-keygen -R %s\033[0m"
+					echo ""
+					echo "Then try connecting again."
+				fi
+				echo ""
+				read -p "Press Enter to close..."
+			fi
+			rm -f "$tmpfile"
+		`, fullCmd, hostname, hostname)
+	} else {
+		wrappedCmd = fullCmd
+	}
 
 	if runtime.GOOS == "darwin" {
 		// macOS - use Terminal.app with osascript
@@ -181,7 +240,7 @@ func (l *Launcher) launchInTerminal(command string, args ...string) *exec.Cmd {
 		script := fmt.Sprintf(`tell application "Terminal"
 			do script "%s"
 			activate
-		end tell`, strings.ReplaceAll(bashCmd, `"`, `\"`))
+		end tell`, strings.ReplaceAll(wrappedCmd, `"`, `\"`))
 
 		return exec.Command("osascript", "-e", script)
 	} else if runtime.GOOS == "linux" {
@@ -191,6 +250,7 @@ func (l *Launcher) launchInTerminal(command string, args ...string) *exec.Cmd {
 			argStyle string // "dash-e", "dash-dash", "direct"
 		}{
 			{"gnome-terminal", "dash-dash"},
+			{"zutty", "dash-e"}, // WSL common terminal
 			{"x-terminal-emulator", "dash-e"},
 			{"konsole", "dash-e"},
 			{"xfce4-terminal", "dash-e"},
@@ -199,15 +259,13 @@ func (l *Launcher) launchInTerminal(command string, args ...string) *exec.Cmd {
 
 		for _, term := range terminals {
 			if termPath, err := exec.LookPath(term.name); err == nil {
-				fmt.Printf("Using terminal: %s\n", term.name)
-
 				switch term.argStyle {
 				case "dash-dash":
 					// gnome-terminal uses -- to separate
-					return exec.Command(termPath, "--", "bash", "-c", bashCmd)
+					return exec.Command(termPath, "--", "bash", "-c", wrappedCmd)
 				case "dash-e":
 					// Most terminals use -e
-					return exec.Command(termPath, "-e", "bash", "-c", bashCmd)
+					return exec.Command(termPath, "-e", "bash", "-c", wrappedCmd)
 				}
 			}
 		}
@@ -480,8 +538,8 @@ func (l *Launcher) createRDPFile(conn *models.Connection, target string) (string
 	// Resolution settings
 	if conn.Resolution != "" {
 		// Parse resolution like "1920x1080"
-		rdpContent += fmt.Sprintf("desktopwidth:i:1920\r\n")
-		rdpContent += fmt.Sprintf("desktopheight:i:1080\r\n")
+		rdpContent += "desktopwidth:i:1920\r\n"
+		rdpContent += "desktopheight:i:1080\r\n"
 	} else {
 		rdpContent += "smart sizing:i:1\r\n"
 	}

@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/yourusername/mremotego/internal/crypto"
-	"github.com/yourusername/mremotego/internal/secrets"
-	"github.com/yourusername/mremotego/pkg/models"
+	"github.com/jaydenthorup/mremotego/internal/crypto"
+	"github.com/jaydenthorup/mremotego/internal/secrets"
+	"github.com/jaydenthorup/mremotego/pkg/models"
 	"gopkg.in/yaml.v3"
 )
 

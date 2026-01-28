@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/yourusername/mremotego/internal/config"
+	"github.com/jaydenthorup/mremotego/internal/config"
 )
 
 var (

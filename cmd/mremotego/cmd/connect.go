@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/yourusername/mremotego/internal/launcher"
+	"github.com/jaydenthorup/mremotego/internal/launcher"
 )
 
 var connectCmd = &cobra.Command{

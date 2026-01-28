@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/yourusername/mremotego/cmd/mremotego/cmd"
+	"github.com/jaydenthorup/mremotego/cmd/mremotego/cmd"
 )
 
 func main() {

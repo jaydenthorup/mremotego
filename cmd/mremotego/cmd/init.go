@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/yourusername/mremotego/internal/config"
-	"github.com/yourusername/mremotego/pkg/models"
+	"github.com/jaydenthorup/mremotego/internal/config"
+	"github.com/jaydenthorup/mremotego/pkg/models"
 )
 
 var initCmd = &cobra.Command{
