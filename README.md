@@ -281,21 +281,72 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🗺️ Roadmap
 
+### ✅ Completed
 - [x] Core connection management (SSH, RDP, VNC, HTTP, Telnet)
 - [x] GUI with tree view and search
-- [x] 1Password integration
+- [x] 1Password integration with special character support
 - [x] AES-256-GCM password encryption
-- [x] Cross-platform builds (Windows, Linux, macOS)
-- [x] CLI mode
-- [ ] Import from mRemoteNG XML?
-- [ ] Connection templates
-- [ ] Improved Settings
-- [ ] Connection groups with inheritance
-- [ ] SSH key management
-- [ ] Session recording/logging
-- [ ] Multi-tab connections
-- [ ] Dark/light theme support
-- [ ] Plugin system
+- [x] Cross-platform builds (Windows, Linux, macOS ARM64)
+- [x] CLI mode for automation
+- [x] Nested folder support with unlimited depth
+- [x] Import from mRemoteNG XML
+- [x] GitHub Actions CI/CD with automated releases
+
+### 🚧 In Progress
+- [ ] Improved settings panel with more options
+
+
+### 📋 Planned Features
+
+#### Password Managers
+- [ ] Bitwarden CLI integration (`bw://` references)
+- [ ] LastPass CLI integration (`lpass://` references)
+- [ ] HashiCorp Vault integration
+- [ ] Pass (password-store) integration for Linux
+
+#### Connection Management
+- [ ] Connection groups with credential inheritance
+- [ ] SSH key management and agent forwarding
+- [ ] Bulk connection operations (edit multiple, duplicate, move)
+- [ ] Connection history and favorites
+- [ ] Quick connect with recent connections
+- [ ] Connection testing (ping, port check)
+- [ ] Connection templates for quick setup
+
+#### UI/UX Improvements
+- [ ] Multi-tab connections within GUI
+- [ ] Dark/light theme toggle
+- [ ] Drag-and-drop folder/connection reorganization
+- [ ] Customizable keyboard shortcuts
+- [ ] Connection icons and colors
+- [ ] Grid/list view toggle
+- [ ] Advanced search with filters (protocol, tags, etc.)
+
+#### Security & Logging
+- [ ] Session recording/logging for audit trails
+- [ ] Connection activity timestamps
+- [ ] Failed login attempt tracking
+- [ ] Security audit reports
+- [ ] Two-factor authentication for master password
+
+#### Advanced Features
+- [ ] Plugin system for custom protocols
+- [ ] Scripting support (pre/post connection commands)
+- [ ] Port forwarding configuration
+- [ ] Proxy/jump host support
+- [ ] VPN integration
+- [ ] Connection macros/automation
+
+#### Platform-Specific
+- [ ] Windows: Hide console window on launch
+- [ ] Linux: System tray integration
+- [ ] macOS: Menu bar app mode
+
+### 💡 Ideas (Vote on GitHub Issues!)
+- [ ] Cloud sync option (encrypted)
+
+
+**Want to contribute?** Pick an item from the roadmap and open an issue or PR!
 
 ---
 
