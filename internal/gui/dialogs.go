@@ -3,6 +3,7 @@ package gui
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -10,6 +11,86 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/jaydenthorup/mremotego/pkg/models"
 )
+
+// collectAllFolders recursively collects all folders with their full paths
+func (w *MainWindow) collectAllFolders(connections []*models.Connection, prefix string, folderMap map[string]*models.Connection, folderNames *[]string) {
+	for _, conn := range connections {
+		if conn.IsFolder() {
+			var fullPath string
+			if prefix == "" {
+				fullPath = conn.Name
+			} else {
+				fullPath = prefix + " / " + conn.Name
+			}
+			*folderNames = append(*folderNames, fullPath)
+			folderMap[fullPath] = conn
+
+			// Recursively process children
+			if len(conn.Children) > 0 {
+				w.collectAllFolders(conn.Children, fullPath, folderMap, folderNames)
+			}
+		}
+	}
+}
+
+// findConnectionParent recursively finds the parent folder and path of a connection
+func (w *MainWindow) findConnectionParent(conn *models.Connection, connections []*models.Connection, prefix string) (string, *models.Connection) {
+	for _, c := range connections {
+		if c.IsFolder() {
+			// Check direct children
+			for _, child := range c.Children {
+				if child == conn {
+					var fullPath string
+					if prefix == "" {
+						fullPath = c.Name
+					} else {
+						fullPath = prefix + " / " + c.Name
+					}
+					return fullPath, c
+				}
+			}
+
+			// Recursively check nested folders
+			if len(c.Children) > 0 {
+				var fullPath string
+				if prefix == "" {
+					fullPath = c.Name
+				} else {
+					fullPath = prefix + " / " + c.Name
+				}
+				if path, parent := w.findConnectionParent(conn, c.Children, fullPath); parent != nil {
+					return path, parent
+				}
+			}
+		}
+	}
+	return "", nil
+}
+
+// findFolderByPath finds a folder by its full path (e.g., "Dev-Ops / Infrastructure / Builders")
+func (w *MainWindow) findFolderByPath(path string, connections []*models.Connection) *models.Connection {
+	parts := strings.Split(path, " / ")
+	current := connections
+
+	for _, part := range parts {
+		found := false
+		for _, conn := range current {
+			if conn.IsFolder() && conn.Name == part {
+				if len(parts) == 1 {
+					return conn
+				}
+				current = conn.Children
+				parts = parts[1:]
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil
+		}
+	}
+	return nil
+}
 
 // showAddConnectionDialog shows the dialog to add a new connection
 func (w *MainWindow) showAddConnectionDialog() {
@@ -37,16 +118,12 @@ func (w *MainWindow) showAddConnectionDialog() {
 	descriptionEntry := widget.NewMultiLineEntry()
 	descriptionEntry.SetPlaceHolder("Description")
 
-	// Folder selection
+	// Folder selection - recursively collect all folders
 	folderNames := []string{"(Root)"}
 	folderMap := make(map[string]*models.Connection)
 	folderMap["(Root)"] = nil
-	for _, conn := range w.manager.GetConfig().Connections {
-		if conn.IsFolder() {
-			folderNames = append(folderNames, conn.Name)
-			folderMap[conn.Name] = conn
-		}
-	}
+	w.collectAllFolders(w.manager.GetConfig().Connections, "", folderMap, &folderNames)
+
 	folderSelect := widget.NewSelect(folderNames, nil)
 	folderSelect.SetSelected("(Root)")
 
@@ -141,15 +218,34 @@ func (w *MainWindow) showAddFolderDialog() {
 	nameEntry := widget.NewEntry()
 	nameEntry.SetPlaceHolder("Folder Name")
 
+	// Folder selection - allow creating folders within folders
+	folderNames := []string{"(Root)"}
+	folderMap := make(map[string]*models.Connection)
+	folderMap["(Root)"] = nil
+	w.collectAllFolders(w.manager.GetConfig().Connections, "", folderMap, &folderNames)
+
+	folderSelect := widget.NewSelect(folderNames, nil)
+	folderSelect.SetSelected("(Root)")
+
 	form := &widget.Form{
 		Items: []*widget.FormItem{
 			{Text: "Name", Widget: nameEntry},
+			{Text: "Parent Folder", Widget: folderSelect},
 		},
 		OnSubmit: func() {
 			folder := models.NewFolder(nameEntry.Text)
 
-			// Add to root
-			w.manager.GetConfig().Connections = append(w.manager.GetConfig().Connections, folder)
+			// Add to selected folder or root
+			selectedFolder := folderSelect.Selected
+			if selectedFolder == "(Root)" {
+				w.manager.GetConfig().Connections = append(w.manager.GetConfig().Connections, folder)
+			} else {
+				// Find the folder and add to its children
+				parentFolder := folderMap[selectedFolder]
+				if parentFolder != nil {
+					parentFolder.Children = append(parentFolder.Children, folder)
+				}
+			}
 
 			if err := w.manager.Save(); err != nil {
 				dialog.ShowError(err, w.window)
@@ -190,6 +286,23 @@ func (w *MainWindow) showEditConnectionDialog(conn *models.Connection) {
 	descriptionEntry := widget.NewMultiLineEntry()
 	descriptionEntry.SetText(conn.Description)
 
+	// Folder selection - find current parent folder using recursive search
+	currentFolder := "(Root)"
+	var parentFolder *models.Connection
+	currentFolder, parentFolder = w.findConnectionParent(conn, w.manager.GetConfig().Connections, "")
+	if currentFolder == "" {
+		currentFolder = "(Root)"
+		parentFolder = nil
+	}
+
+	folderNames := []string{"(Root)"}
+	folderMap := make(map[string]*models.Connection)
+	folderMap["(Root)"] = nil
+	w.collectAllFolders(w.manager.GetConfig().Connections, "", folderMap, &folderNames)
+
+	folderSelect := widget.NewSelect(folderNames, nil)
+	folderSelect.SetSelected(currentFolder)
+
 	// 1Password integration for edit
 	storeTo1PasswordCheck := widget.NewCheck("Push password to 1Password", nil)
 	vaultSelect := widget.NewSelect([]string{"DevOps", "Private", "Employee"}, nil)
@@ -214,6 +327,7 @@ func (w *MainWindow) showEditConnectionDialog(conn *models.Connection) {
 			{Text: "Password", Widget: passwordEntry},
 			{Text: "Domain", Widget: domainEntry},
 			{Text: "Description", Widget: descriptionEntry},
+			{Text: "Folder", Widget: folderSelect},
 			{Text: "", Widget: storeTo1PasswordCheck},
 			{Text: "Vault", Widget: vaultSelect},
 		},
@@ -243,6 +357,39 @@ func (w *MainWindow) showEditConnectionDialog(conn *models.Connection) {
 
 			if port, err := strconv.Atoi(portEntry.Text); err == nil {
 				conn.Port = port
+			}
+
+			// Handle folder change
+			selectedFolder := folderSelect.Selected
+			if selectedFolder != currentFolder {
+				// Remove from old parent
+				if parentFolder != nil {
+					// Remove from parent's children
+					for i, child := range parentFolder.Children {
+						if child == conn {
+							parentFolder.Children = append(parentFolder.Children[:i], parentFolder.Children[i+1:]...)
+							break
+						}
+					}
+				} else {
+					// Remove from root
+					for i, c := range w.manager.GetConfig().Connections {
+						if c == conn {
+							w.manager.GetConfig().Connections = append(w.manager.GetConfig().Connections[:i], w.manager.GetConfig().Connections[i+1:]...)
+							break
+						}
+					}
+				}
+
+				// Add to new parent
+				if selectedFolder == "(Root)" {
+					w.manager.GetConfig().Connections = append(w.manager.GetConfig().Connections, conn)
+				} else {
+					newParent := folderMap[selectedFolder]
+					if newParent != nil {
+						newParent.Children = append(newParent.Children, conn)
+					}
+				}
 			}
 
 			if err := w.manager.Save(); err != nil {
