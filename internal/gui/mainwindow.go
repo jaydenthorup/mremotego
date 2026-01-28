@@ -201,12 +201,18 @@ func (w *MainWindow) createConnectionTree() *widget.Tree {
 					return w.filteredIDs
 				}
 
-				var ids []string
+				var folders []string
+				var connections []string
 				for _, conn := range w.manager.GetConfig().Connections {
 					id := w.getConnectionID(conn)
-					ids = append(ids, id)
+					if conn.IsFolder() {
+						folders = append(folders, id)
+					} else {
+						connections = append(connections, id)
+					}
 				}
-				return ids
+				// Return folders first, then connections
+				return append(folders, connections...)
 			}
 
 			conn, exists := w.connectionData[uid]

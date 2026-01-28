@@ -37,6 +37,19 @@ func (w *MainWindow) showAddConnectionDialog() {
 	descriptionEntry := widget.NewMultiLineEntry()
 	descriptionEntry.SetPlaceHolder("Description")
 
+	// Folder selection
+	folderNames := []string{"(Root)"}
+	folderMap := make(map[string]*models.Connection)
+	folderMap["(Root)"] = nil
+	for _, conn := range w.manager.GetConfig().Connections {
+		if conn.IsFolder() {
+			folderNames = append(folderNames, conn.Name)
+			folderMap[conn.Name] = conn
+		}
+	}
+	folderSelect := widget.NewSelect(folderNames, nil)
+	folderSelect.SetSelected("(Root)")
+
 	// 1Password integration
 	storeTo1PasswordCheck := widget.NewCheck("Store password in 1Password", nil)
 	vaultSelect := widget.NewSelect([]string{"DevOps", "Private", "Employee"}, nil)
@@ -61,6 +74,7 @@ func (w *MainWindow) showAddConnectionDialog() {
 			{Text: "Password", Widget: passwordEntry},
 			{Text: "Domain", Widget: domainEntry},
 			{Text: "Description", Widget: descriptionEntry},
+			{Text: "Folder", Widget: folderSelect},
 			{Text: "", Widget: storeTo1PasswordCheck},
 			{Text: "Vault", Widget: vaultSelect},
 		},
@@ -95,8 +109,17 @@ func (w *MainWindow) showAddConnectionDialog() {
 				dialog.ShowInformation("Success", fmt.Sprintf("Password stored in 1Password vault '%s'", vault), w.window)
 			}
 
-			// Add to root for now (could add folder selection later)
-			w.manager.GetConfig().Connections = append(w.manager.GetConfig().Connections, conn)
+			// Add to selected folder or root
+			selectedFolder := folderSelect.Selected
+			if selectedFolder == "(Root)" {
+				w.manager.GetConfig().Connections = append(w.manager.GetConfig().Connections, conn)
+			} else {
+				// Find the folder and add to its children
+				folder := folderMap[selectedFolder]
+				if folder != nil {
+					folder.Children = append(folder.Children, conn)
+				}
+			}
 
 			if err := w.manager.Save(); err != nil {
 				dialog.ShowError(err, w.window)

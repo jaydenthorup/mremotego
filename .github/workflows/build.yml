@@ -31,10 +31,12 @@ jobs:
             goos: darwin
             goarch: arm64
             name: mremotego-darwin-arm64
-          - os: macos-12
-            goos: darwin
-            goarch: amd64
-            name: mremotego-darwin-amd64
+          # Commented out - macOS Intel runners are very slow on free tier
+          # Uncomment if needed, but most Mac users are on Apple Silicon now
+          # - os: macos-12
+          #   goos: darwin
+          #   goarch: amd64
+          #   name: mremotego-darwin-amd64
 
     steps:
     - name: Checkout code
