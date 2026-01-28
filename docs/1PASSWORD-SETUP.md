@@ -17,7 +17,7 @@ MremoteGO integrates with 1Password CLI to securely store and retrieve passwords
 choco install op
 ```
 
-### 2. Enable CLI Integration
+### 2. (Optional for biometrics)Enable CLI Integration
 
 1. Open **1Password desktop app**
 2. Go to **Settings → Developer**
