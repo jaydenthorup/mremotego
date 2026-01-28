@@ -48,9 +48,13 @@ func (p *OnePasswordProvider) ResolveSecret(reference string) (string, error) {
 		return "", fmt.Errorf("not a 1Password reference: %s", reference)
 	}
 
+	// Parse and encode the reference to handle special characters
+	// op://vault/item/field -> encode the item name part
+	encodedRef := p.encodeReference(reference)
+
 	// Use 'op read' to retrieve the secret
 	// This will prompt for biometric auth if needed - don't pre-check authentication
-	cmd := exec.Command("op", "read", reference)
+	cmd := exec.Command("op", "read", encodedRef)
 	hideConsoleWindow(cmd)
 
 	output, err := cmd.CombinedOutput()
@@ -63,6 +67,34 @@ func (p *OnePasswordProvider) ResolveSecret(reference string) (string, error) {
 	// Trim whitespace and return
 	secret := strings.TrimSpace(string(output))
 	return secret, nil
+}
+
+// encodeReference encodes special characters in the item name portion of a 1Password reference
+// Converts: op://vault/item (name)/field -> op://vault/item%20%28name%29/field
+func (p *OnePasswordProvider) encodeReference(reference string) string {
+	// Parse the reference: op://vault/item/field
+	if !strings.HasPrefix(reference, "op://") {
+		return reference
+	}
+
+	// Remove the "op://" prefix
+	rest := strings.TrimPrefix(reference, "op://")
+	
+	// Split by "/" to get: [vault, item, field, ...]
+	parts := strings.SplitN(rest, "/", 3)
+	if len(parts) < 3 {
+		return reference // Invalid format, return as-is
+	}
+
+	vault := parts[0]
+	item := parts[1]
+	field := parts[2]
+
+	// URL-encode the item name to handle special characters
+	encodedItem := url.PathEscape(item)
+
+	// Reconstruct the reference
+	return fmt.Sprintf("op://%s/%s/%s", vault, encodedItem, field)
 }
 
 // ResolveIfReference resolves a value if it's a 1Password reference, otherwise returns it as-is
