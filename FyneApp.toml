@@ -2,5 +2,5 @@
 # Icon = "icon.svg"  # Temporarily disabled due to loading issues
 Name = "MremoteGO"
 ID = "com.mremotego.app"
-Version = "1.0.2"
-Build = 3
+Version = "1.0.3"
+Build = 4
