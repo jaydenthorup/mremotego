@@ -21,8 +21,8 @@
 - 🖥️ **Cross-Platform** - Windows, Linux, macOS (AMD64 & ARM64)
 - ⚡ **Fast** - Native GUI with instant connections
 - 🚀 **Multiple Protocols** - SSH, RDP, VNC, HTTP/HTTPS, Telnet
-- 📁 **Organized** - Folders, drag-and-drop, search filtering
-- 🔒 **Auto-Login** - Credential manager integration for seamless connections
+- 📁 **Organized** - Folders and search filtering
+- 🔒 **Auto-Login** - Password injection for SSH connections
 - 💻 **CLI & GUI** - Run without arguments for GUI, with arguments for CLI mode
 
 ## 🚀 Quick Start
@@ -289,6 +289,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] CLI mode
 - [ ] Import from mRemoteNG XML?
 - [ ] Connection templates
+- [ ] Improved Settings
 - [ ] Connection groups with inheritance
 - [ ] SSH key management
 - [ ] Session recording/logging
