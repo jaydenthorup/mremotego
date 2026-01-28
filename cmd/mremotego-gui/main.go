@@ -10,11 +10,24 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/yourusername/mremotego/cmd/mremotego/cmd"
 	"github.com/yourusername/mremotego/internal/config"
 	"github.com/yourusername/mremotego/internal/gui"
 )
 
 func main() {
+	// If command-line arguments are provided (other than just the program name),
+	// run in CLI mode
+	if len(os.Args) > 1 {
+		cmd.Execute()
+		return
+	}
+
+	// Otherwise, launch the GUI
+	runGUI()
+}
+
+func runGUI() {
 	// Set locale to avoid warnings on non-standard systems
 	if os.Getenv("LANG") == "" || os.Getenv("LANG") == "C" {
 		os.Setenv("LANG", "en_US.UTF-8")
