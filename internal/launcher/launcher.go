@@ -171,9 +171,9 @@ func (l *Launcher) launchSSHFallback(conn *models.Connection) error {
 // launchInTerminal launches a command in a terminal emulator
 func (l *Launcher) launchInTerminal(command string, args ...string) *exec.Cmd {
 	// Build full command string
-	// For SSH, don't add "Press Enter" prompt - the session itself keeps terminal open
+	// Add error handling: if command fails, show error and wait
 	cmdArgs := append([]string{command}, args...)
-	bashCmd := strings.Join(cmdArgs, " ")
+	bashCmd := strings.Join(cmdArgs, " ") + ` || { echo ""; echo "Connection failed. Press Enter to close..."; read; }`
 
 	if runtime.GOOS == "darwin" {
 		// macOS - use Terminal.app with osascript
