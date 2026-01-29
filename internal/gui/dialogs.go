@@ -208,7 +208,7 @@ func (w *MainWindow) showAddConnectionDialog() {
 		},
 	}
 
-	d := dialog.NewCustom("Add Connection", "Cancel", form, w.window)
+	d := dialog.NewCustom("Add Connection", "Close", form, w.window)
 	d.Resize(fyne.NewSize(500, 700))
 	d.Show()
 }
@@ -257,7 +257,7 @@ func (w *MainWindow) showAddFolderDialog() {
 		},
 	}
 
-	dialog.NewCustom("Add Folder", "Cancel", form, w.window).Show()
+	dialog.NewCustom("Add Folder", "Close", form, w.window).Show()
 }
 
 // showEditConnectionDialog shows the dialog to edit a connection
@@ -403,7 +403,7 @@ func (w *MainWindow) showEditConnectionDialog(conn *models.Connection) {
 		},
 	}
 
-	d := dialog.NewCustom("Edit Connection", "Cancel", form, w.window)
+	d := dialog.NewCustom("Edit Connection", "Close", form, w.window)
 	d.Resize(fyne.NewSize(500, 700))
 	d.Show()
 }
@@ -430,5 +430,5 @@ func (w *MainWindow) showEditFolderDialog(folder *models.Connection) {
 		},
 	}
 
-	dialog.NewCustom("Edit Folder", "Cancel", form, w.window).Show()
+	dialog.NewCustom("Edit Folder", "Close", form, w.window).Show()
 }
