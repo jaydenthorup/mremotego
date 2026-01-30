@@ -127,14 +127,58 @@ func (w *MainWindow) showAddConnectionDialog() {
 	folderSelect := widget.NewSelect(folderNames, nil)
 	folderSelect.SetSelected("(Root)")
 
-	// 1Password integration
+	// 1Password integration - get available vaults and create display name -> ID mapping
+	vaultDisplayNames := []string{}
+	vaultNameToID := make(map[string]string)
+
+	if w.launcher.GetOnePasswordProvider().IsEnabled() {
+		vaults := w.launcher.GetOnePasswordProvider().GetVaults()
+		for _, v := range vaults {
+			// Use title if available and not encrypted, otherwise show "Vault (ID: ...)"
+			displayName := v.Title
+			if v.Title == "[Encrypted]" || v.Title == "" {
+				displayName = fmt.Sprintf("Vault (ID: %s...)", v.ID[:8])
+			}
+			vaultDisplayNames = append(vaultDisplayNames, displayName)
+			vaultNameToID[displayName] = v.ID
+		}
+	}
+
+	if len(vaultDisplayNames) == 0 {
+		vaultDisplayNames = []string{"No vaults available"}
+	}
+
 	storeTo1PasswordCheck := widget.NewCheck("Store password in 1Password", nil)
-	vaultSelect := widget.NewSelect([]string{"DevOps", "Private", "Employee"}, nil)
-	vaultSelect.SetSelected("DevOps")
+	vaultSelect := widget.NewSelect(vaultDisplayNames, nil)
+	if len(vaultDisplayNames) > 0 && vaultDisplayNames[0] != "No vaults available" {
+		vaultSelect.SetSelected(vaultDisplayNames[0])
+	}
 	vaultSelect.Hide()
 
 	storeTo1PasswordCheck.OnChanged = func(checked bool) {
 		if checked {
+			// Try to refresh vault names when checkbox is enabled
+			if w.launcher.GetOnePasswordProvider().IsEnabled() {
+				if w.launcher.GetOnePasswordProvider().RefreshVaultNames() {
+					// Vault names were decrypted, rebuild the dropdown
+					vaultDisplayNames = []string{}
+					vaultNameToID = make(map[string]string)
+					vaults := w.launcher.GetOnePasswordProvider().GetVaults()
+					for _, v := range vaults {
+						displayName := v.Title
+						if v.Title == "[Encrypted]" || v.Title == "" {
+							displayName = fmt.Sprintf("Vault (ID: %s...)", v.ID[:8])
+						}
+						vaultDisplayNames = append(vaultDisplayNames, displayName)
+						vaultNameToID[displayName] = v.ID
+					}
+					vaultSelect.Options = vaultDisplayNames
+					if len(vaultDisplayNames) > 0 {
+						vaultSelect.SetSelected(vaultDisplayNames[0])
+					}
+					vaultSelect.Refresh()
+				}
+			}
 			vaultSelect.Show()
 		} else {
 			vaultSelect.Hide()
@@ -175,15 +219,19 @@ func (w *MainWindow) showAddConnectionDialog() {
 
 			// If user wants to store in 1Password, create the item
 			if storeTo1PasswordCheck.Checked && conn.Password != "" && !w.manager.IsOnePasswordReference(conn.Password) {
-				vault := vaultSelect.Selected
-				reference, err := w.manager.CreateOnePasswordItem(vault, conn.Name, conn.Username, conn.Password)
+				displayName := vaultSelect.Selected
+				vaultID := vaultNameToID[displayName]
+				if vaultID == "" {
+					vaultID = displayName // Fallback to using the display name as ID
+				}
+				reference, err := w.manager.CreateOnePasswordItem(vaultID, conn.Name, conn.Username, conn.Password)
 				if err != nil {
 					dialog.ShowError(fmt.Errorf("Failed to create 1Password item: %w", err), w.window)
 					return
 				}
 				// Replace password with 1Password reference
 				conn.Password = reference
-				dialog.ShowInformation("Success", fmt.Sprintf("Password stored in 1Password vault '%s'", vault), w.window)
+				dialog.ShowInformation("Success", fmt.Sprintf("Password stored in 1Password vault"), w.window)
 			}
 
 			// Add to selected folder or root
@@ -303,14 +351,58 @@ func (w *MainWindow) showEditConnectionDialog(conn *models.Connection) {
 	folderSelect := widget.NewSelect(folderNames, nil)
 	folderSelect.SetSelected(currentFolder)
 
-	// 1Password integration for edit
+	// 1Password integration for edit - get available vaults and create display name -> ID mapping
+	vaultDisplayNames2 := []string{}
+	vaultNameToID2 := make(map[string]string)
+
+	if w.launcher.GetOnePasswordProvider().IsEnabled() {
+		vaults := w.launcher.GetOnePasswordProvider().GetVaults()
+		for _, v := range vaults {
+			// Use title if available and not encrypted, otherwise show "Vault (ID: ...)"
+			displayName := v.Title
+			if v.Title == "[Encrypted]" || v.Title == "" {
+				displayName = fmt.Sprintf("Vault (ID: %s...)", v.ID[:8])
+			}
+			vaultDisplayNames2 = append(vaultDisplayNames2, displayName)
+			vaultNameToID2[displayName] = v.ID
+		}
+	}
+
+	if len(vaultDisplayNames2) == 0 {
+		vaultDisplayNames2 = []string{"No vaults available"}
+	}
+
 	storeTo1PasswordCheck := widget.NewCheck("Push password to 1Password", nil)
-	vaultSelect := widget.NewSelect([]string{"DevOps", "Private", "Employee"}, nil)
-	vaultSelect.SetSelected("DevOps")
+	vaultSelect := widget.NewSelect(vaultDisplayNames2, nil)
+	if len(vaultDisplayNames2) > 0 && vaultDisplayNames2[0] != "No vaults available" {
+		vaultSelect.SetSelected(vaultDisplayNames2[0])
+	}
 	vaultSelect.Hide()
 
 	storeTo1PasswordCheck.OnChanged = func(checked bool) {
 		if checked {
+			// Try to refresh vault names when checkbox is enabled
+			if w.launcher.GetOnePasswordProvider().IsEnabled() {
+				if w.launcher.GetOnePasswordProvider().RefreshVaultNames() {
+					// Vault names were decrypted, rebuild the dropdown
+					vaultDisplayNames2 = []string{}
+					vaultNameToID2 = make(map[string]string)
+					vaults := w.launcher.GetOnePasswordProvider().GetVaults()
+					for _, v := range vaults {
+						displayName := v.Title
+						if v.Title == "[Encrypted]" || v.Title == "" {
+							displayName = fmt.Sprintf("Vault (ID: %s...)", v.ID[:8])
+						}
+						vaultDisplayNames2 = append(vaultDisplayNames2, displayName)
+						vaultNameToID2[displayName] = v.ID
+					}
+					vaultSelect.Options = vaultDisplayNames2
+					if len(vaultDisplayNames2) > 0 {
+						vaultSelect.SetSelected(vaultDisplayNames2[0])
+					}
+					vaultSelect.Refresh()
+				}
+			}
 			vaultSelect.Show()
 		} else {
 			vaultSelect.Hide()
@@ -334,15 +426,19 @@ func (w *MainWindow) showEditConnectionDialog(conn *models.Connection) {
 		OnSubmit: func() {
 			// If user wants to push password to 1Password
 			if storeTo1PasswordCheck.Checked && passwordEntry.Text != "" && !w.manager.IsOnePasswordReference(passwordEntry.Text) {
-				vault := vaultSelect.Selected
-				reference, err := w.manager.CreateOnePasswordItem(vault, nameEntry.Text, usernameEntry.Text, passwordEntry.Text)
+				displayName := vaultSelect.Selected
+				vaultID := vaultNameToID2[displayName]
+				if vaultID == "" {
+					vaultID = displayName // Fallback to using the display name as ID
+				}
+				reference, err := w.manager.CreateOnePasswordItem(vaultID, nameEntry.Text, usernameEntry.Text, passwordEntry.Text)
 				if err != nil {
 					dialog.ShowError(fmt.Errorf("Failed to create 1Password item: %w", err), w.window)
 					return
 				}
 				// Replace password with 1Password reference
 				conn.Password = reference
-				dialog.ShowInformation("Success", fmt.Sprintf("Password stored in 1Password vault '%s'", vault), w.window)
+				dialog.ShowInformation("Success", fmt.Sprintf("Password stored in 1Password vault"), w.window)
 			} else {
 				conn.Password = passwordEntry.Text
 			}
@@ -431,4 +527,188 @@ func (w *MainWindow) showEditFolderDialog(folder *models.Connection) {
 	}
 
 	dialog.NewCustom("Edit Folder", "Close", form, w.window).Show()
+}
+
+// showSettingsDialog shows the application settings dialog
+func (w *MainWindow) showSettingsDialog() {
+	cfg := w.manager.GetConfig()
+	if cfg == nil {
+		dialog.ShowError(fmt.Errorf("no configuration loaded"), w.window)
+		return
+	}
+
+	// Ensure settings struct exists - this is important for configs that don't have settings yet
+	if cfg.Settings == nil {
+		cfg.Settings = &models.Settings{}
+	}
+
+	// Create form fields
+	accountEntry := widget.NewEntry()
+	accountEntry.SetPlaceHolder("e.g., My 1Password, Work Account, company.1password.com")
+	if cfg.Settings.OnePasswordAccount != "" {
+		accountEntry.SetText(cfg.Settings.OnePasswordAccount)
+	}
+
+	// Instructions label
+	instructions := widget.NewLabel(
+		"1Password Account Name:\n" +
+			"• Open 1Password desktop app\n" +
+			"• Look at the top of the sidebar\n" +
+			"• Enter the exact account name shown\n" +
+			"• Leave empty to disable 1Password integration",
+	)
+	instructions.Wrapping = fyne.TextWrapWord
+
+	// Vault mappings button
+	vaultMappingsBtn := widget.NewButton("Configure Vault Names...", func() {
+		w.showVaultMappingsDialog()
+	})
+
+	vaultInfo := widget.NewLabel(
+		"Vault Names:\n" +
+			"• Map vault IDs to friendly names\n" +
+			"• Required because SDK can't decrypt vault names\n" +
+			"• Click button above to configure",
+	)
+	vaultInfo.Wrapping = fyne.TextWrapWord
+
+	form := &widget.Form{
+		Items: []*widget.FormItem{
+			{Text: "1Password Account", Widget: accountEntry},
+			{Text: "", Widget: instructions},
+			{Text: "Vault Mappings", Widget: vaultMappingsBtn},
+			{Text: "", Widget: vaultInfo},
+		},
+		OnSubmit: func() {
+			// Ensure settings struct exists before saving
+			if cfg.Settings == nil {
+				cfg.Settings = &models.Settings{}
+			}
+
+			// Update settings
+			newAccountName := strings.TrimSpace(accountEntry.Text)
+			cfg.Settings.OnePasswordAccount = newAccountName
+
+			// Save configuration
+			if err := w.manager.Save(); err != nil {
+				dialog.ShowError(err, w.window)
+				return
+			}
+
+			// Show restart message if account changed
+			if newAccountName != "" {
+				dialog.ShowInformation(
+					"Settings Saved",
+					"Settings saved successfully.\n\nPlease restart the application for 1Password changes to take effect.",
+					w.window,
+				)
+			} else {
+				dialog.ShowInformation("Settings Saved", "Settings saved successfully.", w.window)
+			}
+		},
+		OnCancel: func() {
+			// Dialog will be closed automatically
+		},
+	}
+
+	d := dialog.NewCustom("Settings", "Close", form, w.window)
+	d.Resize(fyne.NewSize(500, 400))
+	d.Show()
+}
+
+// showVaultMappingsDialog shows a dialog to configure vault ID to name mappings
+func (w *MainWindow) showVaultMappingsDialog() {
+	if w.launcher.GetOnePasswordProvider() == nil || !w.launcher.GetOnePasswordProvider().IsEnabled() {
+		dialog.ShowInformation(
+			"1Password Not Available",
+			"1Password SDK is not initialized. Please configure your 1Password account first.",
+			w.window,
+		)
+		return
+	}
+
+	// Get current vaults
+	vaults := w.launcher.GetOnePasswordProvider().GetVaults()
+	if len(vaults) == 0 {
+		dialog.ShowInformation(
+			"No Vaults Found",
+			"No vaults found. Make sure 1Password is unlocked.",
+			w.window,
+		)
+		return
+	}
+
+	// Get existing mappings
+	cfg := w.manager.GetConfig()
+	existingMappings := make(map[string]string)
+	if cfg.Settings != nil && cfg.Settings.VaultNames != nil {
+		existingMappings = cfg.Settings.VaultNames
+	}
+
+	// Create entry fields for each vault
+	vaultEntries := make(map[string]*widget.Entry)
+	formItems := []*widget.FormItem{}
+
+	for _, v := range vaults {
+		entry := widget.NewEntry()
+		entry.SetPlaceHolder("Enter friendly name")
+
+		// Pre-fill with existing mapping or current title
+		if friendlyName, ok := existingMappings[v.ID]; ok {
+			entry.SetText(friendlyName)
+		} else if v.Title != "" && v.Title != "[Encrypted]" {
+			entry.SetText(v.Title)
+		}
+
+		vaultEntries[v.ID] = entry
+
+		// Show vault ID in the label
+		label := fmt.Sprintf("Vault ID: %s...", v.ID[:12])
+		formItems = append(formItems, &widget.FormItem{
+			Text:   label,
+			Widget: entry,
+		})
+	}
+
+	// Instructions
+	instructions := widget.NewLabel(
+		"Map each vault ID to a friendly name (e.g., DevOps, Employee, etc.).\n" +
+			"These names will appear in the vault dropdown when creating connections.",
+	)
+	instructions.Wrapping = fyne.TextWrapWord
+
+	formItems = append([]*widget.FormItem{{Text: "", Widget: instructions}}, formItems...)
+
+	form := &widget.Form{
+		Items: formItems,
+		OnSubmit: func() {
+			// Build new mappings
+			newMappings := make(map[string]string)
+			for vaultID, entry := range vaultEntries {
+				name := strings.TrimSpace(entry.Text)
+				if name != "" && name != "[Encrypted]" {
+					newMappings[vaultID] = name
+				}
+			}
+
+			// Save mappings
+			if err := w.manager.SaveVaultNameMappings(newMappings); err != nil {
+				dialog.ShowError(fmt.Errorf("failed to save vault mappings: %w", err), w.window)
+				return
+			}
+
+			dialog.ShowInformation(
+				"Vault Mappings Saved",
+				fmt.Sprintf("Successfully saved mappings for %d vault(s).", len(newMappings)),
+				w.window,
+			)
+		},
+		OnCancel: func() {
+			// Dialog will be closed automatically
+		},
+	}
+
+	d := dialog.NewCustom("Configure Vault Names", "Close", form, w.window)
+	d.Resize(fyne.NewSize(600, 400))
+	d.Show()
 }

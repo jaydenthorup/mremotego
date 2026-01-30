@@ -47,16 +47,24 @@ type Connection struct {
 	Modified string   `yaml:"modified,omitempty"`
 }
 
-// Config represents the root configuration
+// Config represents the entire configuration file
 type Config struct {
 	Version     string        `yaml:"version"`
+	Settings    *Settings     `yaml:"settings"` // Always write settings section
 	Connections []*Connection `yaml:"connections"`
+}
+
+// Settings represents global application settings
+type Settings struct {
+	OnePasswordAccount string            `yaml:"onepassword_account"`  // Always write this field
+	VaultNames         map[string]string `yaml:"vault_names,omitempty"` // Maps vault IDs to friendly names
 }
 
 // NewConfig creates a new empty configuration
 func NewConfig() *Config {
 	return &Config{
 		Version:     "1.0",
+		Settings:    &Settings{}, // Initialize empty settings
 		Connections: make([]*Connection, 0),
 	}
 }
@@ -161,6 +169,21 @@ func (cfg *Config) DeepCopy() *Config {
 
 	cfgCopy := &Config{
 		Version: cfg.Version,
+	}
+
+	// Deep copy settings
+	if cfg.Settings != nil {
+		settingsCopy := &Settings{
+			OnePasswordAccount: cfg.Settings.OnePasswordAccount,
+		}
+		// Deep copy vault name map
+		if cfg.Settings.VaultNames != nil {
+			settingsCopy.VaultNames = make(map[string]string)
+			for k, v := range cfg.Settings.VaultNames {
+				settingsCopy.VaultNames[k] = v
+			}
+		}
+		cfgCopy.Settings = settingsCopy
 	}
 
 	// Deep copy connections

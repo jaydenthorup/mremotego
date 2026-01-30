@@ -1,4 +1,13 @@
 version: "1.0"
+
+# Global Settings
+settings:
+  # 1Password Desktop App Integration
+  # Set this to your account name as shown at the TOP of the 1Password desktop app sidebar
+  # Examples: "My 1Password", "Work Account", "company.1password.com"
+  # Leave empty or comment out to disable 1Password integration
+  onepassword_account: ""
+
 connections:
   - name: "Production"
     type: folder

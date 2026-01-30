@@ -157,7 +157,8 @@ MremoteGO supports three password storage methods:
    - Store passwords securely in 1Password vaults
    - Use `op://Vault/Item/field` references in your config
    - Safe to commit configs to git
-   - Supports biometric unlock
+   - **Native desktop app integration with biometric unlock** (1Password SDK)
+   - No CLI commands needed - just unlock 1Password and go!
    - See [1Password Setup Guide](docs/1PASSWORD-SETUP.md)
 
 2. **Encrypted** (Recommended for local use):
@@ -173,7 +174,7 @@ MremoteGO supports three password storage methods:
 
 ### Best Practices
 
-- ✅ Use 1Password for team environments
+- ✅ Use 1Password for team environments (best UX with biometric auth)
 - ✅ Use encryption for personal configs
 - ✅ Add `config.yaml` and `connections.yaml` to `.gitignore`
 - ✅ Use separate configs for different environments

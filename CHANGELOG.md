@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-01-30
+
+### 🎉 MAJOR: Native 1Password SDK Integration
+
+**Breaking Change**: MremoteGO now uses the 1Password SDK instead of CLI for password management.
+
+### Added
+- **Native 1Password desktop app integration** - No CLI commands needed!
+- **Biometric authentication support** - Unlock with Touch ID/Windows Hello
+- **Seamless UX** - Just unlock 1Password app and MremoteGO automatically authenticates
+- **Automatic re-authentication** - Handles locked 1Password app gracefully
+- **Better error messages** - Clear feedback when authentication is needed
+
+### Changed
+- **Breaking**: Requires 1Password desktop app (BETA version for SDK support)
+- **Breaking**: CGO now required for builds (for SDK integration)
+- Switched from `op` CLI to 1Password SDK v0.4.0-beta.2
+- Improved authentication flow with desktop app integration
+
+### Migration Guide
+
+#### For Users:
+1. Install 1Password desktop app (BETA version)
+2. Go to Settings → Developer in 1Password
+3. Enable "Integrate with the 1Password SDKs"
+4. Enable "Integrate with other apps"
+5. Restart MremoteGO - it will prompt for biometric auth when needed!
+
+#### For Developers:
+- CGO must be enabled: `$env:CGO_ENABLED="1"` (Windows) or `export CGO_ENABLED=1` (Unix)
+- C compiler required (gcc/clang on Linux/Mac, MinGW on Windows)
+- SDK provides better API than CLI (structured data, proper error types)
+
+### Technical Details
+- Uses 1Password SDK v0.4.0-beta.2 with Windows desktop app support
+- Session lasts 10 minutes, auto-expires for security
+- Automatic re-authentication when 1Password app is locked
+- All `op://vault/item/field` references continue to work
+- SDK handles special characters better than CLI ever could
+
+### Why This Change?
+
+**Old (CLI-based)**:
+- Required `op signin` in terminal before launching GUI
+- Session tokens only worked when launched from same terminal
+- Complex setup with environment variables
+- No biometric support
+
+**New (SDK-based)**:
+- Just unlock 1Password app
+- Biometric authentication (Touch ID/Windows Hello/Face ID)
+- Works from any launcher (desktop shortcut, Start menu, etc.)
+- Seamless UX matching native 1Password experience
+
 ## [1.0.4] - 2026-01-28
 
 ### Fixed

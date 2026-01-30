@@ -7,6 +7,9 @@ if (!(Test-Path -Path "bin")) {
     New-Item -ItemType Directory -Path "bin" | Out-Null
 }
 
+# Enable CGO (required for Fyne GUI and 1Password SDK)
+$env:CGO_ENABLED = "1"
+
 # Build the application
 # Using -H windowsgui to hide console window on Windows
 if ($IsWindows -or $env:OS -match "Windows") {

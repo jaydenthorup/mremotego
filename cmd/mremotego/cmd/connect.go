@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/spf13/cobra"
 	"github.com/jaydenthorup/mremotego/internal/launcher"
+	"github.com/spf13/cobra"
 )
 
 var connectCmd = &cobra.Command{
@@ -26,8 +26,14 @@ var connectCmd = &cobra.Command{
 			return fmt.Errorf("connection not found: %w", err)
 		}
 
+		// Get 1Password account name from config
+		accountName := ""
+		if cfg := manager.GetConfig(); cfg != nil && cfg.Settings != nil {
+			accountName = cfg.Settings.OnePasswordAccount
+		}
+
 		// Launch
-		l := launcher.NewLauncher()
+		l := launcher.NewLauncher(accountName)
 		if err := l.Launch(conn); err != nil {
 			return fmt.Errorf("failed to launch connection: %w", err)
 		}

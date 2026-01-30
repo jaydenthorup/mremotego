@@ -52,9 +52,6 @@ func runGUI() {
 	// Create config manager
 	manager := config.NewManager(cfgPath)
 
-	// Create the main window first but don't show it yet
-	mainWindow := gui.NewMainWindow(myApp, manager)
-
 	// Check if config exists and if it has encrypted passwords
 	_, statErr := os.Stat(cfgPath)
 	configExists := statErr == nil
@@ -69,11 +66,18 @@ func runGUI() {
 		}
 	}
 
+	// Load config early (before creating MainWindow) so settings are available
 	if skipPasswordDialog {
 		// No encrypted passwords, load without password
 		if err := manager.Load(); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
 		}
+	}
+
+	// Create the main window AFTER loading config so it can read settings
+	mainWindow := gui.NewMainWindow(myApp, manager)
+
+	if skipPasswordDialog {
 		mainWindow.Reload()
 		mainWindow.Show()
 		myApp.Run()

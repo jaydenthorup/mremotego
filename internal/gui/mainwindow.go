@@ -35,12 +35,26 @@ type MainWindow struct {
 
 // NewMainWindow creates a new main window
 func NewMainWindow(app fyne.App, manager *config.Manager) *MainWindow {
+	// Get 1Password account name from config
+	accountName := ""
+	if cfg := manager.GetConfig(); cfg != nil && cfg.Settings != nil {
+		accountName = cfg.Settings.OnePasswordAccount
+		fmt.Printf("[DEBUG] Loaded 1Password account from config: '%s'\n", accountName)
+	} else {
+		fmt.Println("[DEBUG] No settings found in config")
+	}
+
 	w := &MainWindow{
 		app:            app,
 		window:         app.NewWindow("MremoteGO - Remote Connection Manager"),
 		manager:        manager,
-		launcher:       launcher.NewLauncher(),
+		launcher:       launcher.NewLauncher(accountName),
 		connectionData: make(map[string]*models.Connection),
+	}
+
+	// Set the SDK provider in the config manager so it uses SDK for creating items too
+	if accountName != "" {
+		manager.SetOnePasswordSDKProvider(w.launcher.GetOnePasswordProvider())
 	}
 
 	w.setupUI()
@@ -117,6 +131,8 @@ func (w *MainWindow) setupUI() {
 func (w *MainWindow) setupMenuBar() {
 	fileMenu := fyne.NewMenu("File",
 		fyne.NewMenuItem("Open Config...", func() { w.openConfig() }),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem("Settings...", func() { w.showSettingsDialog() }),
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("New Connection", func() { w.showAddConnectionDialog() }),
 		fyne.NewMenuItem("New Folder", func() { w.showAddFolderDialog() }),

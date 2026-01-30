@@ -15,18 +15,20 @@ import (
 
 // Launcher handles launching connections
 type Launcher struct {
-	onePasswordProvider *secrets.OnePasswordProvider
+	onePasswordProvider *secrets.OnePasswordSDKProvider
 }
 
-// NewLauncher creates a new launcher
-func NewLauncher() *Launcher {
+// NewLauncher creates a new launcher with 1Password SDK integration
+// Uses desktop app integration with biometric auth (1Password SDK v0.4.0-beta.2+)
+// accountName should be the account name shown at the top of the 1Password sidebar
+func NewLauncher(accountName string) *Launcher {
 	return &Launcher{
-		onePasswordProvider: secrets.NewOnePasswordProvider(),
+		onePasswordProvider: secrets.NewOnePasswordSDKProvider(accountName),
 	}
 }
 
-// GetOnePasswordProvider returns the 1Password provider for checking authentication status
-func (l *Launcher) GetOnePasswordProvider() *secrets.OnePasswordProvider {
+// GetOnePasswordProvider returns the 1Password SDK provider for checking authentication status
+func (l *Launcher) GetOnePasswordProvider() *secrets.OnePasswordSDKProvider {
 	return l.onePasswordProvider
 }
 
@@ -39,17 +41,30 @@ func (l *Launcher) Launch(conn *models.Connection) error {
 	// Resolve 1Password reference if needed (make a copy to avoid modifying the original)
 	resolvedConn := *conn
 	if l.onePasswordProvider.IsReference(conn.Password) {
+		fmt.Printf("[DEBUG] Detected 1Password reference: %s\n", conn.Password)
+
+		// Check if SDK is authenticated
+		if !l.onePasswordProvider.IsAuthenticated() {
+			fmt.Println("[DEBUG] 1Password SDK is not authenticated")
+			instructions := l.onePasswordProvider.GetAuthenticationInstructions()
+			fmt.Println(instructions)
+		} else {
+			fmt.Println("[DEBUG] 1Password SDK is authenticated")
+		}
+
 		resolved, err := l.onePasswordProvider.ResolveSecret(conn.Password)
 		if err != nil {
-			// For RDP, we can continue without a password (will prompt)
-			// For other protocols that require a password, return the error
-			if conn.Protocol != models.ProtocolRDP {
+			// For RDP and SSH, we can continue without a password
+			// RDP will prompt, SSH can use keys
+			if conn.Protocol == models.ProtocolRDP || conn.Protocol == models.ProtocolSSH {
+				fmt.Printf("[WARNING] Failed to resolve password from 1Password: %v (connection will proceed without password)\n", err)
+				resolvedConn.Password = ""
+			} else {
+				// For other protocols that require a password, return the error
 				return fmt.Errorf("failed to resolve password from 1Password: %w", err)
 			}
-			// RDP: Clear the password so it doesn't try to use the op:// reference
-			fmt.Printf("Warning: Failed to resolve password from 1Password: %v (RDP will prompt for credentials)\n", err)
-			resolvedConn.Password = ""
 		} else {
+			fmt.Printf("[DEBUG] Successfully resolved password from 1Password (length: %d)\n", len(resolved))
 			resolvedConn.Password = resolved
 		}
 	}

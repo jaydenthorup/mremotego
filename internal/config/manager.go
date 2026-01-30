@@ -14,10 +14,11 @@ import (
 
 // Manager handles configuration file operations
 type Manager struct {
-	configPath          string
-	config              *models.Config
-	onePasswordProvider *secrets.OnePasswordProvider
-	encryptionProvider  *crypto.EncryptionProvider
+	configPath             string
+	config                 *models.Config
+	onePasswordProvider    *secrets.OnePasswordProvider    // CLI provider (fallback)
+	onePasswordSDKProvider *secrets.OnePasswordSDKProvider // SDK provider (preferred)
+	encryptionProvider     *crypto.EncryptionProvider
 }
 
 // NewManager creates a new configuration manager
@@ -85,6 +86,19 @@ func (m *Manager) Load() error {
 	var config models.Config
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	// Debug: Print what was loaded
+	fmt.Printf("[DEBUG] Config loaded - Version: %s\n", config.Version)
+	fmt.Printf("[DEBUG] Settings pointer: %v\n", config.Settings)
+	if config.Settings != nil {
+		fmt.Printf("[DEBUG] OnePasswordAccount: '%s'\n", config.Settings.OnePasswordAccount)
+	}
+
+	// Ensure settings struct is always initialized (even for older config files)
+	if config.Settings == nil {
+		config.Settings = &models.Settings{}
+		fmt.Println("[DEBUG] Initialized nil Settings struct")
 	}
 
 	// Decrypt passwords if encryption is enabled
@@ -389,7 +403,44 @@ func (m *Manager) IsOnePasswordReference(password string) bool {
 
 // CreateOnePasswordItem creates a new 1Password item and returns the reference
 func (m *Manager) CreateOnePasswordItem(vault, title, username, password string) (string, error) {
+	// Use SDK provider if available (preferred), otherwise fall back to CLI
+	if m.onePasswordSDKProvider != nil {
+		return m.onePasswordSDKProvider.CreateItem(vault, title, username, password)
+	}
 	return m.onePasswordProvider.CreateItem(vault, title, username, password)
+}
+
+// SetOnePasswordSDKProvider sets the SDK provider for 1Password operations
+// Also loads vault name mappings from settings if available
+func (m *Manager) SetOnePasswordSDKProvider(provider *secrets.OnePasswordSDKProvider) {
+	m.onePasswordSDKProvider = provider
+	
+	// Load vault name mappings from config settings if available
+	if m.config != nil && m.config.Settings != nil && len(m.config.Settings.VaultNames) > 0 {
+		provider.SetVaultNameMap(m.config.Settings.VaultNames)
+		fmt.Printf("[Config] Loaded %d vault name mappings from settings\n", len(m.config.Settings.VaultNames))
+	}
+}
+
+// SaveVaultNameMappings saves vault name mappings to the config settings
+func (m *Manager) SaveVaultNameMappings(mappings map[string]string) error {
+	if m.config == nil {
+		return fmt.Errorf("config not loaded")
+	}
+	
+	if m.config.Settings == nil {
+		m.config.Settings = &models.Settings{}
+	}
+	
+	m.config.Settings.VaultNames = mappings
+	
+	// Also update the SDK provider if it's set
+	if m.onePasswordSDKProvider != nil {
+		m.onePasswordSDKProvider.SetVaultNameMap(mappings)
+	}
+	
+	// Save the config
+	return m.Save()
 }
 
 // saveRecentFile saves the current config path as the most recently used file
