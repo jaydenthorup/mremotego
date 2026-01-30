@@ -17,8 +17,8 @@ type OnePasswordSDKProvider struct {
 	client       *onepassword.Client
 	accountName  string
 	enabled      bool
-	vaults       []VaultInfo       // Stores vault ID and title (title may be [Encrypted] until auth)
-	vaultNameMap map[string]string // Maps vault IDs to friendly names from config
+	vaults       []VaultInfo          // Stores vault ID and title (title may be [Encrypted] until auth)
+	vaultNameMap map[string]string    // Maps vault IDs to friendly names from config
 	cliProvider  *OnePasswordProvider // Fallback to CLI if SDK not available
 }
 
@@ -64,13 +64,13 @@ func NewOnePasswordSDKProvider(accountName string) *OnePasswordSDKProvider {
 		// SDK initialization failed - desktop app integration not available
 		// Try to fall back to CLI provider
 		fmt.Printf("[1Password SDK] ❌ Failed to initialize: %v\n", err)
-		
+
 		if provider.cliProvider.IsEnabled() {
 			fmt.Println("[1Password] ✅ Falling back to CLI provider (op)")
 			fmt.Println("")
 			return provider // Will use CLI provider for operations
 		}
-		
+
 		// Neither SDK nor CLI available
 		fmt.Println("")
 		fmt.Println("To enable 1Password integration, choose one:")
@@ -181,7 +181,7 @@ func (p *OnePasswordSDKProvider) IsAuthenticated() bool {
 		_, err := p.client.Vaults().List(ctx)
 		return err == nil
 	}
-	
+
 	// Fall back to CLI provider
 	if p.cliProvider != nil && p.cliProvider.IsEnabled() {
 		return p.cliProvider.IsAuthenticated()
@@ -194,7 +194,7 @@ func (p *OnePasswordSDKProvider) GetAuthenticationInstructions() string {
 	// Check if CLI is available as fallback
 	cliAvailable := p.cliProvider != nil && p.cliProvider.IsEnabled()
 	cliAuthenticated := cliAvailable && p.cliProvider.IsAuthenticated()
-	
+
 	baseInstructions := ""
 	if p.accountName == "" {
 		baseInstructions = `MremoteGO supports two ways to connect to 1Password:
@@ -264,16 +264,16 @@ func (p *OnePasswordSDKProvider) GetAuthenticationInstructions() string {
 3. Launch MremoteGO from the same terminal
    (Inherits your session token automatically)`, p.accountName, p.accountName)
 	}
-	
+
 	// Add status information
 	statusInfo := "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n📊 Current Status:\n"
-	
+
 	if p.enabled {
 		statusInfo += "   ✅ SDK: Connected (using desktop app)\n"
 	} else {
 		statusInfo += "   ❌ SDK: Not available\n"
 	}
-	
+
 	if cliAvailable {
 		if cliAuthenticated {
 			statusInfo += "   ✅ CLI: Available and authenticated\n"
@@ -283,7 +283,7 @@ func (p *OnePasswordSDKProvider) GetAuthenticationInstructions() string {
 	} else {
 		statusInfo += "   ❌ CLI: Not installed\n"
 	}
-	
+
 	return baseInstructions + statusInfo
 }
 

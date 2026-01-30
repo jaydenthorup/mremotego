@@ -5,49 +5,85 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2026-01-30
-
-### 🎉 MAJOR: Native 1Password SDK Integration
-
-**Breaking Change**: MremoteGO now uses the 1Password SDK instead of CLI for password management.
+## [2.0.1-alpha] - 2026-01-30
 
 ### Added
-- **Native 1Password desktop app integration** - No CLI commands needed!
-- **Biometric authentication support** - Unlock with Touch ID/Windows Hello
-- **Seamless UX** - Just unlock 1Password app and MremoteGO automatically authenticates
-- **Automatic re-authentication** - Handles locked 1Password app gracefully
-- **Better error messages** - Clear feedback when authentication is needed
+- Enhanced 1Password authentication instructions showing both SDK and CLI options
+- Real-time status display for SDK and CLI availability
+- Authentication state indicators in setup dialog
+- VS Code workspace configuration for easy development
 
 ### Changed
-- **Breaking**: Requires 1Password desktop app (BETA version for SDK support)
-- **Breaking**: CGO now required for builds (for SDK integration)
-- Switched from `op` CLI to 1Password SDK v0.4.0-beta.2
-- Improved authentication flow with desktop app integration
+- Improved authentication instructions popup with clearer options
+- Better guidance for users choosing between SDK and CLI methods
+
+## [2.0.0] - 2026-01-30
+
+### 🎉 MAJOR: Native 1Password SDK Integration with CLI Fallback
+
+**Breaking Change**: MremoteGO now uses the 1Password SDK for enhanced desktop app integration.
+
+### Added
+- **Native 1Password desktop app integration** - Biometric auth with SDK
+- **Automatic CLI fallback** - Falls back to `op` CLI if SDK unavailable
+- **Vault name mapping** - Use friendly names instead of UUIDs in config
+- **Biometric authentication support** - Touch ID/Face ID/Windows Hello
+- **Seamless UX** - Just unlock 1Password app for automatic authentication
+- **Automatic re-authentication** - Handles locked 1Password app gracefully
+- **Better error messages** - Clear feedback with setup instructions
+- **VS Code integration** - Build tasks, debug configs, recommended extensions
+- **Comprehensive test suite** - 35+ unit tests with good coverage
+- **CLI smoke tests** - Automated testing for CLI commands
+
+### Changed
+- **Breaking**: CGO now required for builds (for SDK and Fyne GUI)
+- Switched from CLI-only to SDK with CLI fallback
+- Improved authentication flow with dual-mode support
+- Settings now persisted correctly (DeepCopy bug fixed)
+- Enhanced copyright information in About dialog
 
 ### Migration Guide
 
 #### For Users:
+
+**Option 1: Desktop App (Recommended)**
 1. Install 1Password desktop app (BETA version)
 2. Go to Settings → Developer in 1Password
 3. Enable "Integrate with the 1Password SDKs"
 4. Enable "Integrate with other apps"
-5. Restart MremoteGO - it will prompt for biometric auth when needed!
+5. Configure in config.yaml:
+   ```yaml
+   settings:
+     onePasswordAccount: "your-account-name"
+     vaultNameMappings:
+       Personal: "uuid-here"
+   ```
+6. Restart MremoteGO - biometric auth will prompt when needed!
+
+**Option 2: CLI Fallback (Automatic)**
+1. Install 1Password CLI: `op`
+2. Sign in: `op signin`
+3. Launch MremoteGO from same terminal - works automatically!
 
 #### For Developers:
 - CGO must be enabled: `$env:CGO_ENABLED="1"` (Windows) or `export CGO_ENABLED=1` (Unix)
-- C compiler required (gcc/clang on Linux/Mac, MinGW on Windows)
-- SDK provides better API than CLI (structured data, proper error types)
+- C compiler required (gcc/clang on Linux/Mac, MinGW/TDM-GCC on Windows)
+- VS Code configuration included for easy setup
+- Run tests: `go test ./...`
 
 ### Technical Details
-- Uses 1Password SDK v0.4.0-beta.2 with Windows desktop app support
-- Session lasts 10 minutes, auto-expires for security
-- Automatic re-authentication when 1Password app is locked
+- Uses 1Password SDK v0.4.0-beta.2 with desktop app support
+- Automatic fallback to CLI provider if SDK initialization fails
+- Vault name mapping stored in settings.vaultNameMappings
+- Session lasts 10 minutes with SDK, auto-expires for security
 - All `op://vault/item/field` references continue to work
-- SDK handles special characters better than CLI ever could
+- SDK handles special characters and URL encoding automatically
+- DeepCopy implemented for Settings struct to prevent data loss
+- 35+ unit tests covering models, config, secrets, and CLI commands
 
 ### Why This Change?
 
-**Old (CLI-based)**:
+**New (SDK with CLI fallback)**:
 - Required `op signin` in terminal before launching GUI
 - Session tokens only worked when launched from same terminal
 - Complex setup with environment variables

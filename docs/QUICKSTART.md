@@ -48,24 +48,38 @@ Click **Submit**.
 
 ## Using 1Password (Recommended)
 
-### Quick Setup
+### Option 1: Desktop App Integration (Best Experience)
 
-1. Install [1Password desktop app](https://1password.com/downloads)
-2. Install [1Password CLI](https://developer.1password.com/docs/cli/get-started/): `winget install 1Password.CLI`
-3. Enable integration: 1Password → Settings → Developer → "Integrate with 1Password CLI"
+1. Install [1Password BETA desktop app](https://releases.1password.com/)
+2. Enable SDK: Settings → Developer → Enable both SDK options
+3. Configure in your `config.yaml`:
+   ```yaml
+   settings:
+     onePasswordAccount: "your-account-name"
+     vaultNameMappings:
+       Personal: "vault-uuid-here"
+       Work: "vault-uuid-here"
+   ```
+4. Get biometric authentication automatically!
+
+### Option 2: CLI Fallback
+
+1. Install [1Password CLI](https://developer.1password.com/docs/cli/get-started/)
+2. Sign in: `op signin`
+3. Launch MremoteGO from same terminal - automatic fallback!
 
 ### Add Connection with 1Password
 
 When adding a connection:
 
-**Password field:**
+**With vault mappings:**
 ```
-op://Private/My Server/password
+password: op://Personal/My Server/password
 ```
 
-Or check **"Store in 1Password"** to create the item automatically.
+**Or check "Store in 1Password"** to create the item automatically.
 
-See [docs/1PASSWORD-SETUP.md](docs/1PASSWORD-SETUP.md) for details.
+See [1PASSWORD-SETUP.md](1PASSWORD-SETUP.md) for complete details.
 
 ## Common Tasks
 

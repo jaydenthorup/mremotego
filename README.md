@@ -16,7 +16,8 @@
 
 - 🎨 **Modern GUI** - Clean interface with connection tree, search, and quick actions
 - 🔐 **Password Encryption** - AES-256-GCM encryption at rest with master password
-- 🔑 **1Password Integration** - Store passwords securely using `op://` references
+- 🔑 **1Password Integration** - Native SDK with biometric auth OR CLI fallback
+- 🗂️ **Vault Name Mapping** - Use friendly names for 1Password vaults in your config
 - 📝 **Git-Friendly** - YAML configs are easy to diff, merge, and review
 - 🖥️ **Cross-Platform** - Windows, Linux, macOS (AMD64 & ARM64)
 - ⚡ **Fast** - Native GUI with instant connections
@@ -24,6 +25,7 @@
 - 📁 **Organized** - Folders and search filtering
 - 🔒 **Auto-Login** - Password injection for SSH connections
 - 💻 **CLI & GUI** - Run without arguments for GUI, with arguments for CLI mode
+- 🧪 **Well-Tested** - Comprehensive test suite with 35+ unit tests
 
 ## 🚀 Quick Start
 
@@ -157,8 +159,10 @@ MremoteGO supports three password storage methods:
    - Store passwords securely in 1Password vaults
    - Use `op://Vault/Item/field` references in your config
    - Safe to commit configs to git
-   - **Native desktop app integration with biometric unlock** (1Password SDK) Needs the Nightly Build of the 1password app and sdk enabled https://developer.1password.com/docs/sdks/desktop-app-integrations
-   - No CLI commands needed - just unlock 1Password and go!
+   - **Two connection methods:**
+     - **Desktop App (Recommended)**: Native SDK with biometric unlock - requires 1Password BETA app with SDK enabled
+     - **CLI Fallback**: Automatic fallback to `op` CLI if desktop app unavailable
+   - Vault name mapping: Use friendly names instead of UUIDs
    - See [1Password Setup Guide](docs/1PASSWORD-SETUP.md)
 
 2. **Encrypted** (Recommended for local use):
@@ -174,10 +178,11 @@ MremoteGO supports three password storage methods:
 
 ### Best Practices
 
-- ✅ Use 1Password for team environments (best UX with biometric auth)
+- ✅ Use 1Password for team environments (SDK with biometric OR CLI fallback)
 - ✅ Use encryption for personal configs
 - ✅ Add `config.yaml` and `connections.yaml` to `.gitignore`
 - ✅ Use separate configs for different environments
+- ✅ Configure vault name mappings for easier reference management
 - ✅ Regularly rotate credentials
 - ⚠️ Never commit plain-text passwords to git
 
@@ -194,6 +199,8 @@ MremoteGO supports three password storage methods:
 ### Prerequisites
 
 - Go 1.23 or later
+- CGO enabled (for GUI and 1Password SDK)
+- For Windows: GCC/MinGW (TDM-GCC or MSYS2)
 - For Linux: `gcc`, `libgl1-mesa-dev`, `xorg-dev`
 - For GUI builds: Fyne dependencies
 
@@ -201,6 +208,11 @@ MremoteGO supports three password storage methods:
 
 ```bash
 # Build GUI + CLI (single executable)
+# CGO is required for both Fyne GUI and 1Password SDK
+export CGO_ENABLED=1  # Linux/Mac
+# or
+$env:CGO_ENABLED="1"  # Windows PowerShell
+
 go build -o mremotego ./cmd/mremotego-gui
 
 # Build without console window (Windows only)
@@ -209,9 +221,21 @@ go build -ldflags "-H windowsgui" -o mremotego.exe ./cmd/mremotego-gui
 # Run tests
 go test ./...
 
-# Build for all platforms
-./build-all.sh
+# Run tests with coverage
+go test -cover ./...
+
+# Build for all platforms (using GitHub Actions)
+# See .github/workflows/build.yml
 ```
+
+### VS Code Development
+
+The repository includes VS Code configuration for easy development:
+
+- **Build Tasks**: Press `Ctrl+Shift+B` to build
+- **Debug/Run**: Press `F5` to run the GUI
+- **Recommended Extensions**: Go extension will be suggested
+- **CGO Configuration**: Automatically configured in workspace settings
 
 ### Project Structure
 

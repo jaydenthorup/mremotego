@@ -1,40 +1,110 @@
 # 1Password Setup Guide
 
-MremoteGO integrates with 1Password CLI to securely store and retrieve passwords. This allows you to:
+MremoteGO integrates with 1Password in two ways to securely store and retrieve passwords:
+
+1. **Desktop App Integration (Recommended)** - Native SDK with biometric unlock
+2. **CLI Fallback** - Automatic fallback to `op` command if desktop app unavailable
+
+This allows you to:
 - Keep passwords out of config files
 - Share configs via git safely
 - Use biometric unlock for password access
+- Work in any environment (desktop or CLI-only)
 
-## Quick Setup
+## 🔷 Option 1: Desktop App Integration (Recommended)
 
-### 1. Install Requirements
+### Prerequisites
 
-```powershell
-# Install 1Password desktop app (if not already installed)
-# Download from https://1password.com/downloads
+- 1Password desktop app **BETA version** (required for SDK support)
+- Download from: https://releases.1password.com/
 
-# Install 1Password CLI
-choco install op
-```
+### 1. Install 1Password Desktop App
 
-### 2. (Optional for biometrics)Enable CLI Integration
+Download and install the BETA version of the 1Password desktop app.
+
+### 2. Enable SDK Integration
 
 1. Open **1Password desktop app**
 2. Go to **Settings → Developer**
-3. Enable **"Integrate with 1Password CLI"**
+3. Enable **"Integrate with the 1Password SDKs"**
+4. Enable **"Integrate with other apps"**
 
-### 3. Verify Setup
+### 3. Configure MremoteGO
+
+In your `config.yaml`:
+
+```yaml
+settings:
+  onePasswordAccount: "your-account-name"
+  vaultNameMappings:
+    Personal: "uuid-of-personal-vault"
+    Work: "uuid-of-work-vault"
+```
+
+**Finding your account name:**
+- Look at the top of the sidebar in the 1Password desktop app
+- Example: "My Personal Account" or "work.1password.com"
+
+**Vault name mappings (optional but recommended):**
+- Maps friendly names to vault UUIDs
+- Use `Personal` instead of long UUID in references
+- Get vault IDs from the authentication instructions dialog
+
+### 4. Verify Setup
+
+Launch MremoteGO - it will show connection status:
+- ✅ SDK: Connected (using desktop app)
+- If not connected, check the instructions in the authentication dialog
+
+### Benefits of Desktop App Integration
+
+- 🔐 **Biometric authentication** - Touch ID, Face ID, Windows Hello
+- ⚡ **Faster** - Direct integration, no CLI process spawning
+- 🛡️ **More secure** - Session management handled by 1Password
+- 💎 **Better UX** - Seamless authentication flow
+
+## 🔷 Option 2: CLI Fallback
+
+MremoteGO automatically falls back to CLI if desktop app integration isn't available.
+
+### 1. Install 1Password CLI
 
 ```powershell
-# Check CLI is installed
-op --version
-Invoke-Expression $(op signin)
+# Windows (Chocolatey)
+choco install op
 
-# Check integration (should show your account after desktop app authenticates)
+# macOS (Homebrew)
+brew install 1password-cli
+
+# Linux
+# See: https://developer.1password.com/docs/cli/get-started/
+```
+
+### 2. Sign In
+
+```powershell
+# Sign in to your account
+op signin
+
+# Verify authentication
 op whoami
 ```
 
-That's it! The CLI uses your 1Password desktop app session with biometric unlock.
+### 3. Launch MremoteGO
+
+Launch MremoteGO from the **same terminal** where you ran `op signin`:
+
+```powershell
+# The session token is inherited automatically
+.\mremotego.exe
+```
+
+### Benefits of CLI Fallback
+
+- 🖥️ **Works everywhere** - Headless servers, CI/CD, remote environments
+- 🔄 **Automatic** - No configuration needed, just falls back
+- 🛠️ **Scripting** - Great for automation and testing
+- 📦 **Service accounts** - Supports OP_SERVICE_ACCOUNT_TOKEN
 
 ## Using 1Password References
 
@@ -71,28 +141,50 @@ Reference format: `op://vault-name/item-name/field-name`
 - Item: `Server (Production)` → Reference: `op://vault/Server%20%28Production%29/password`
 - The GUI handles this automatically when you use "Store in 1Password"
 
+### Using Vault Name Mappings
+
+With vault name mappings, you can use friendly names instead of UUIDs:
+
+**Without mappings:**
+```yaml
+password: op://abcd-1234-efgh-5678/Production Server/password
+```
+
+**With mappings:**
+```yaml
+# In config.yaml
+settings:
+  vaultNameMappings:
+    Work: "abcd-1234-efgh-5678"
+
+# In connections
+password: op://Work/Production Server/password
+```
+
 ### Common Vaults
 
-- `Private` - Your personal vault
-- `Shared` - Team shared vault
-- `DevOps` - Custom team vault
+- `Private` or `Personal` - Your personal vault
+- `Shared` - Team shared vault  
+- `Work` or `DevOps` - Custom team vault (configure in mappings)
 
 ## How It Works
+
+### Desktop App Integration (SDK)
 
 ```
 ┌─────────────────────────────────────────────────┐
 │ 1. User clicks "Connect" in MremoteGO          │
-│    Connection has: op://Private/Server/password│
+│    Connection has: op://Work/Server/password   │
 └─────────────────────────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────────────┐
-│ 2. MremoteGO calls: op read op://...           │
-│    (Hidden console window - no popup)           │
+│ 2. MremoteGO calls 1Password SDK               │
+│    Maps "Work" → vault UUID using config       │
 └─────────────────────────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────────────┐
-│ 3. 1Password CLI talks to desktop app          │
-│    Uses your existing session & biometric auth  │
+│ 3. 1Password desktop app prompts biometric     │
+│    Touch ID / Face ID / Windows Hello          │
 └─────────────────────────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────────────┐
@@ -103,6 +195,29 @@ Reference format: `op://vault-name/item-name/field-name`
                     ↓
 ┌─────────────────────────────────────────────────┐
 │ 5. Connection launches with auto-login         │
+└─────────────────────────────────────────────────┘
+```
+
+### CLI Fallback
+
+```
+┌─────────────────────────────────────────────────┐
+│ 1. User clicks "Connect" in MremoteGO          │
+│    SDK not available, falls back to CLI        │
+└─────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────┐
+│ 2. MremoteGO calls: op read op://...           │
+│    (Hidden console window - no popup)           │
+└─────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────┐
+│ 3. op CLI uses session token or service account│
+│    No additional authentication needed         │
+└─────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────┐
+│ 4. Password returned and connection launches   │
 └─────────────────────────────────────────────────┘
 ```
 
