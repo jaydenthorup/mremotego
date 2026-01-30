@@ -191,10 +191,17 @@ func (p *OnePasswordSDKProvider) IsAuthenticated() bool {
 
 // GetAuthenticationInstructions returns instructions for authenticating with 1Password SDK
 func (p *OnePasswordSDKProvider) GetAuthenticationInstructions() string {
+	// Check if CLI is available as fallback
+	cliAvailable := p.cliProvider != nil && p.cliProvider.IsEnabled()
+	cliAuthenticated := cliAvailable && p.cliProvider.IsAuthenticated()
+	
+	baseInstructions := ""
 	if p.accountName == "" {
-		return `MremoteGO needs to connect to your 1Password desktop app.
+		baseInstructions = `MremoteGO supports two ways to connect to 1Password:
 
-✅ SETUP INSTRUCTIONS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔷 OPTION 1: Desktop App (Recommended - Biometric Auth)
 
 1. Install the 1Password desktop app (BETA version required)
    Download from: https://releases.1password.com/
@@ -206,24 +213,31 @@ func (p *OnePasswordSDKProvider) GetAuthenticationInstructions() string {
    • Turn on "Integrate with the 1Password SDKs"
    • Turn on "Integrate with other apps"
 
-4. Note your account name:
-   • Look at the top of the sidebar in 1Password
-   • Example: "My Personal Account" or "work.1password.com"
+4. In your config.yaml, set:
+   settings:
+     onePasswordAccount: "Your Account Name"
+   (Find this at the top of the 1Password sidebar)
 
-5. Restart MremoteGO and unlock 1Password with biometrics!
+5. Restart MremoteGO and unlock with biometrics!
 
-🔐 Once enabled, MremoteGO will prompt for biometric authentication
-   when accessing passwords - just like unlocking 1Password itself!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-────────────────────────────────────────────────────
+� OPTION 2: CLI (Fallback - Session Token)
 
-Note: This uses the 1Password SDK BETA feature for desktop app integration.
-      Session lasts 10 minutes and auto-expires for security.`
-	}
+1. Install 1Password CLI:
+   https://developer.1password.com/docs/cli/get-started/
 
-	return fmt.Sprintf(`MremoteGO needs to connect to your 1Password desktop app.
+2. Sign in:
+   op signin
 
-✅ SETUP INSTRUCTIONS:
+3. Launch MremoteGO from the same terminal
+   (Inherits your session token automatically)`
+	} else {
+		baseInstructions = fmt.Sprintf(`MremoteGO supports two ways to connect to 1Password:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔷 OPTION 1: Desktop App (Configured: %s)
 
 1. Install the 1Password desktop app (BETA version required)
    Download from: https://releases.1password.com/
@@ -235,15 +249,42 @@ Note: This uses the 1Password SDK BETA feature for desktop app integration.
    • Turn on "Integrate with the 1Password SDKs"
    • Turn on "Integrate with other apps"
 
-4. Restart MremoteGO and unlock 1Password with biometrics!
+4. Restart MremoteGO and unlock with biometrics!
 
-🔐 Once enabled, MremoteGO will prompt for biometric authentication
-   when accessing passwords - just like unlocking 1Password itself!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-────────────────────────────────────────────────────
+� OPTION 2: CLI (Fallback - Session Token)
 
-Note: This uses the 1Password SDK BETA feature for desktop app integration.
-      Session lasts 10 minutes and auto-expires for security.`, p.accountName)
+1. Install 1Password CLI:
+   https://developer.1password.com/docs/cli/get-started/
+
+2. Sign in:
+   op signin
+
+3. Launch MremoteGO from the same terminal
+   (Inherits your session token automatically)`, p.accountName, p.accountName)
+	}
+	
+	// Add status information
+	statusInfo := "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n📊 Current Status:\n"
+	
+	if p.enabled {
+		statusInfo += "   ✅ SDK: Connected (using desktop app)\n"
+	} else {
+		statusInfo += "   ❌ SDK: Not available\n"
+	}
+	
+	if cliAvailable {
+		if cliAuthenticated {
+			statusInfo += "   ✅ CLI: Available and authenticated\n"
+		} else {
+			statusInfo += "   ⚠️  CLI: Available but not authenticated (run 'op signin')\n"
+		}
+	} else {
+		statusInfo += "   ❌ CLI: Not installed\n"
+	}
+	
+	return baseInstructions + statusInfo
 }
 
 // IsReference checks if a string is a 1Password reference (starts with op://)
