@@ -414,7 +414,7 @@ func (m *Manager) CreateOnePasswordItem(vault, title, username, password string)
 // Also loads vault name mappings from settings if available
 func (m *Manager) SetOnePasswordSDKProvider(provider *secrets.OnePasswordSDKProvider) {
 	m.onePasswordSDKProvider = provider
-	
+
 	// Load vault name mappings from config settings if available
 	if m.config != nil && m.config.Settings != nil && len(m.config.Settings.VaultNames) > 0 {
 		provider.SetVaultNameMap(m.config.Settings.VaultNames)
@@ -427,18 +427,18 @@ func (m *Manager) SaveVaultNameMappings(mappings map[string]string) error {
 	if m.config == nil {
 		return fmt.Errorf("config not loaded")
 	}
-	
+
 	if m.config.Settings == nil {
 		m.config.Settings = &models.Settings{}
 	}
-	
+
 	m.config.Settings.VaultNames = mappings
-	
+
 	// Also update the SDK provider if it's set
 	if m.onePasswordSDKProvider != nil {
 		m.onePasswordSDKProvider.SetVaultNameMap(mappings)
 	}
-	
+
 	// Save the config
 	return m.Save()
 }

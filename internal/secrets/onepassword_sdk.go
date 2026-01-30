@@ -16,8 +16,8 @@ type OnePasswordSDKProvider struct {
 	client       *onepassword.Client
 	accountName  string
 	enabled      bool
-	vaults       []VaultInfo              // Stores vault ID and title (title may be [Encrypted] until auth)
-	vaultNameMap map[string]string        // Maps vault IDs to friendly names from config
+	vaults       []VaultInfo       // Stores vault ID and title (title may be [Encrypted] until auth)
+	vaultNameMap map[string]string // Maps vault IDs to friendly names from config
 }
 
 // VaultInfo holds vault information
@@ -89,7 +89,7 @@ func NewOnePasswordSDKProvider(accountName string) *OnePasswordSDKProvider {
 		fmt.Println("[1Password SDK] Triggering authentication to decrypt vault names...")
 		ctxAuth, cancelAuth := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancelAuth()
-		
+
 		// Try to list items and read the first item's password field to force full auth
 		items, itemsErr := client.Items().List(ctxAuth, vaults[0].ID)
 		fmt.Printf("[DEBUG] Items list error: %v, items count: %d\n", itemsErr, len(items))
@@ -422,7 +422,7 @@ func (p *OnePasswordSDKProvider) GetVaults() []VaultInfo {
 	if !p.enabled {
 		return []VaultInfo{}
 	}
-	
+
 	// If we have vault name mappings, use them to provide friendly names
 	if len(p.vaultNameMap) > 0 {
 		vaults := make([]VaultInfo, 0, len(p.vaults))
@@ -438,7 +438,7 @@ func (p *OnePasswordSDKProvider) GetVaults() []VaultInfo {
 		}
 		return vaults
 	}
-	
+
 	return p.vaults
 }
 

@@ -56,7 +56,7 @@ type Config struct {
 
 // Settings represents global application settings
 type Settings struct {
-	OnePasswordAccount string            `yaml:"onepassword_account"`  // Always write this field
+	OnePasswordAccount string            `yaml:"onepassword_account"`   // Always write this field
 	VaultNames         map[string]string `yaml:"vault_names,omitempty"` // Maps vault IDs to friendly names
 }
 
