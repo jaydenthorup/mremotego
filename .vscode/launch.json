@@ -2,23 +2,24 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Run GUI",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/mremotego-gui",
+            "env": {
+                "CGO_ENABLED": "1"
+            },
+            "console": "integratedTerminal",
+            "buildFlags": "-tags=dev"
+        },
+        {
             "name": "Debug CLI",
             "type": "go",
             "request": "launch",
             "mode": "debug",
             "program": "${workspaceFolder}/cmd/mremotego",
             "args": ["list"],
-            "console": "integratedTerminal"
-        },
-        {
-            "name": "Debug GUI",
-            "type": "go",
-            "request": "launch",
-            "mode": "debug",
-            "program": "${workspaceFolder}/cmd/mremotego-gui",
-            "env": {
-                "CGO_ENABLED": "1"
-            },
             "console": "integratedTerminal"
         },
         {
