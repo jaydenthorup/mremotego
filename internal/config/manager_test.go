@@ -134,7 +134,7 @@ func TestManager_SetOnePasswordSDKProvider(t *testing.T) {
 
 	// Create mock SDK provider
 	provider := &secrets.OnePasswordSDKProvider{}
-	
+
 	// Set provider
 	manager.SetOnePasswordSDKProvider(provider)
 
@@ -150,7 +150,7 @@ func TestManager_SetOnePasswordSDKProvider(t *testing.T) {
 
 func TestManager_GetConfig(t *testing.T) {
 	manager := NewManager("/tmp/test.yaml")
-	
+
 	// NewManager doesn't load, but config might be initialized
 	// Just verify GetConfig returns whatever is set
 	config := models.NewConfig()
