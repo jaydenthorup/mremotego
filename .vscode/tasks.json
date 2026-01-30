@@ -1,0 +1,91 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build CLI",
+            "type": "shell",
+            "command": "go",
+            "args": [
+                "build",
+                "-o",
+                "mremotego.exe",
+                "./cmd/mremotego"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": ["$go"]
+        },
+        {
+            "label": "Build GUI",
+            "type": "shell",
+            "command": "go",
+            "args": [
+                "build",
+                "-o",
+                "mremotego-gui.exe",
+                "./cmd/mremotego-gui"
+            ],
+            "options": {
+                "env": {
+                    "CGO_ENABLED": "1"
+                }
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": ["$go"]
+        },
+        {
+            "label": "Build All",
+            "dependsOn": ["Build CLI", "Build GUI"],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run CLI",
+            "type": "shell",
+            "command": ".\\mremotego.exe",
+            "args": ["list"],
+            "dependsOn": ["Build CLI"],
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Run GUI",
+            "type": "shell",
+            "command": ".\\mremotego-gui.exe",
+            "dependsOn": ["Build GUI"],
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Run Tests",
+            "type": "shell",
+            "command": "go",
+            "args": ["test", "-v", "./..."],
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": ["$go"]
+        }
+    ]
+}

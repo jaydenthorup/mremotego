@@ -1,0 +1,11 @@
+{
+    "makefile.configureOnOpen": false,
+    "go.toolsEnvVars": {
+        "CGO_ENABLED": "1"
+    },
+    "gopls": {
+        "build.env": {
+            "CGO_ENABLED": "1"
+        }
+    }
+}
