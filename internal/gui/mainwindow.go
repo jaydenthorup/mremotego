@@ -565,7 +565,7 @@ func (w *MainWindow) showAbout() {
 	dialog.ShowInformation("About MremoteGO",
 		"MremoteGO v1.0\n\nA Git-compatible remote connection manager\n\n"+
 			"Built with Go and Fyne\n\n"+
-			"© 2026 Your Name",
+			"© 2026 Jayden Thorup",
 		w.window)
 }
 
