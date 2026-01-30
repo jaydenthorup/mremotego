@@ -8,10 +8,9 @@ if (!(Test-Path -Path "bin")) {
 }
 
 # Build the application
-# Note: Not using -H windowsgui so CLI mode works
-# This means a console window will briefly appear when launching the GUI on Windows
+# Using -H windowsgui to hide console window on Windows
 if ($IsWindows -or $env:OS -match "Windows") {
-    go build -o mremotego.exe cmd/mremotego-gui/main.go cmd/mremotego-gui/theme.go
+    go build -ldflags "-H windowsgui" -o mremotego.exe cmd/mremotego-gui/main.go cmd/mremotego-gui/theme.go
     $outputFile = "mremotego.exe"
 } else {
     go build -o mremotego cmd/mremotego-gui/main.go cmd/mremotego-gui/theme.go

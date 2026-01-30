@@ -31,6 +31,44 @@ func (p *OnePasswordProvider) IsEnabled() bool {
 	return p.enabled
 }
 
+// IsAuthenticated checks if the user is currently signed in to 1Password CLI
+func (p *OnePasswordProvider) IsAuthenticated() bool {
+	if !p.enabled {
+		return false
+	}
+
+	cmd := exec.Command("op", "whoami")
+	hideConsoleWindow(cmd)
+	return cmd.Run() == nil
+}
+
+// GetAuthenticationInstructions returns instructions for authenticating with 1Password CLI
+func (p *OnePasswordProvider) GetAuthenticationInstructions() string {
+	return `1Password CLI needs authentication.
+
+✅ OPTION 1: Launch from same terminal (Session Token)
+If you run "op signin" in PowerShell, then launch MremoteGO from that SAME terminal:
+  Invoke-Expression $(op signin)
+  .\mremotego.exe
+The GUI will inherit your session token and "op://" passwords will work!
+
+✅ OPTION 2: Desktop App Integration (Recommended - Persistent Auth)
+1. Open the 1Password desktop app
+2. Sign in if you haven't already
+3. Go to Settings → Developer
+4. Enable "Integrate with 1Password CLI"
+5. Restart MremoteGO
+
+This allows the CLI to use your desktop app session with biometric unlock.
+No terminal commands needed - it just works!
+
+────────────────────────────────────────────────────
+
+Alternative (not recommended):
+You can set the OP_SERVICE_ACCOUNT_TOKEN environment variable for automation,
+but this requires a 1Password service account (business/team plans only).`
+}
+
 // IsReference checks if a string is a 1Password reference (starts with op://)
 func (p *OnePasswordProvider) IsReference(value string) bool {
 	return strings.HasPrefix(value, "op://")
@@ -82,7 +120,7 @@ func (p *OnePasswordProvider) parseReference(reference string) (string, string, 
 
 	// Remove the "op://" prefix
 	rest := strings.TrimPrefix(reference, "op://")
-	
+
 	// Split by "/" to get: [vault, item, field, ...]
 	parts := strings.SplitN(rest, "/", 3)
 	if len(parts) < 3 {

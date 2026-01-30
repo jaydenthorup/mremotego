@@ -25,6 +25,11 @@ func NewLauncher() *Launcher {
 	}
 }
 
+// GetOnePasswordProvider returns the 1Password provider for checking authentication status
+func (l *Launcher) GetOnePasswordProvider() *secrets.OnePasswordProvider {
+	return l.onePasswordProvider
+}
+
 // Launch launches a connection based on its protocol
 func (l *Launcher) Launch(conn *models.Connection) error {
 	if conn.IsFolder() {

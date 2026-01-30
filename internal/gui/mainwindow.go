@@ -556,9 +556,51 @@ func (w *MainWindow) showAbout() {
 // Show displays the main window
 func (w *MainWindow) Show() {
 	w.window.Show()
+
+	// Check 1Password CLI authentication status after window is shown
+	w.check1PasswordAuth()
 }
 
-// Reload refreshes the window with the loaded config
+// check1PasswordAuth checks if 1Password CLI needs authentication
+func (w *MainWindow) check1PasswordAuth() {
+	// Check if there are any 1Password references in use
+	hasOpReferences := false
+	var checkConnections func([]*models.Connection)
+	checkConnections = func(conns []*models.Connection) {
+		for _, conn := range conns {
+			if conn.IsFolder() {
+				checkConnections(conn.Children)
+			} else if strings.HasPrefix(conn.Password, "op://") {
+				hasOpReferences = true
+				return
+			}
+		}
+	}
+	checkConnections(w.manager.GetConfig().Connections)
+
+	// Only check if there are actually 1Password references in use
+	if !hasOpReferences {
+		return
+	}
+
+	// Check if 1Password CLI is authenticated
+	opProvider := w.launcher.GetOnePasswordProvider()
+	if opProvider.IsEnabled() && !opProvider.IsAuthenticated() {
+		// Show a helpful dialog
+		content := widget.NewLabel(opProvider.GetAuthenticationInstructions())
+		content.Wrapping = fyne.TextWrapWord
+
+		scrollContainer := container.NewVScroll(content)
+		scrollContainer.SetMinSize(fyne.NewSize(600, 400))
+
+		dialog.ShowCustom(
+			"1Password CLI Not Authenticated",
+			"OK",
+			scrollContainer,
+			w.window,
+		)
+	}
+} // Reload refreshes the window with the loaded config
 func (w *MainWindow) Reload() {
 	w.buildConnectionMap()
 	w.tree.Refresh()
