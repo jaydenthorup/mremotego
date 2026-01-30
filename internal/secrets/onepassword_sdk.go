@@ -12,12 +12,14 @@ import (
 
 // OnePasswordSDKProvider handles retrieving secrets using the 1Password SDK
 // This provides native desktop app integration with biometric unlock
+// Falls back to CLI provider if SDK is not available
 type OnePasswordSDKProvider struct {
 	client       *onepassword.Client
 	accountName  string
 	enabled      bool
 	vaults       []VaultInfo       // Stores vault ID and title (title may be [Encrypted] until auth)
 	vaultNameMap map[string]string // Maps vault IDs to friendly names from config
+	cliProvider  *OnePasswordProvider // Fallback to CLI if SDK not available
 }
 
 // VaultInfo holds vault information
@@ -28,15 +30,22 @@ type VaultInfo struct {
 
 // NewOnePasswordSDKProvider creates a new 1Password SDK provider with desktop app integration
 // accountName should be the account name shown at the top of the 1Password desktop app sidebar
+// If SDK initialization fails, it automatically falls back to the CLI provider
 func NewOnePasswordSDKProvider(accountName string) *OnePasswordSDKProvider {
 	provider := &OnePasswordSDKProvider{
 		accountName: accountName,
 		enabled:     false,
+		cliProvider: NewOnePasswordProvider(), // Initialize CLI fallback
 	}
 
 	// Validate input
 	if accountName == "" {
-		fmt.Println("[1Password SDK] ⚠️  Account name required. 1Password integration disabled.")
+		fmt.Println("[1Password SDK] ⚠️  Account name required. Checking CLI fallback...")
+		if provider.cliProvider.IsEnabled() {
+			fmt.Println("[1Password] ✅ Falling back to CLI provider (op)")
+			return provider // Will use CLI provider
+		}
+		fmt.Println("[1Password] ❌ Neither SDK nor CLI available. 1Password integration disabled.")
 		return provider
 	}
 
@@ -53,14 +62,28 @@ func NewOnePasswordSDKProvider(accountName string) *OnePasswordSDKProvider {
 
 	if err != nil {
 		// SDK initialization failed - desktop app integration not available
-		// This is not a fatal error, we just won't have 1Password support
+		// Try to fall back to CLI provider
 		fmt.Printf("[1Password SDK] ❌ Failed to initialize: %v\n", err)
+		
+		if provider.cliProvider.IsEnabled() {
+			fmt.Println("[1Password] ✅ Falling back to CLI provider (op)")
+			fmt.Println("")
+			return provider // Will use CLI provider for operations
+		}
+		
+		// Neither SDK nor CLI available
 		fmt.Println("")
-		fmt.Println("Make sure you have:")
-		fmt.Println("  1. 1Password desktop app (BETA) installed and running")
+		fmt.Println("To enable 1Password integration, choose one:")
+		fmt.Println("")
+		fmt.Println("OPTION 1: Use 1Password SDK (Desktop App)")
+		fmt.Println("  1. Install 1Password desktop app (BETA) and ensure it's running")
 		fmt.Println("  2. Settings → Developer → 'Integrate with the 1Password SDKs' enabled")
 		fmt.Println("  3. Settings → Developer → 'Integrate with other apps' enabled")
-		fmt.Println("  4. The correct account name (check top of 1Password sidebar)")
+		fmt.Println("  4. Verify the correct account name (check top of 1Password sidebar)")
+		fmt.Println("")
+		fmt.Println("OPTION 2: Use 1Password CLI")
+		fmt.Println("  1. Install 1Password CLI (op): https://developer.1password.com/docs/cli/get-started/")
+		fmt.Println("  2. Sign in: op signin")
 		fmt.Println("")
 		return provider
 	}
@@ -134,24 +157,36 @@ func NewOnePasswordSDKProvider(accountName string) *OnePasswordSDKProvider {
 	return provider
 }
 
-// IsEnabled returns whether the 1Password SDK is available and initialized
+// IsEnabled returns whether the 1Password SDK or CLI is available
 func (p *OnePasswordSDKProvider) IsEnabled() bool {
-	return p.enabled
+	// Check if SDK is enabled first
+	if p.enabled {
+		return true
+	}
+	// Fall back to CLI provider
+	if p.cliProvider != nil && p.cliProvider.IsEnabled() {
+		return true
+	}
+	return false
 }
 
-// IsAuthenticated checks if the user is currently authenticated with 1Password desktop app
+// IsAuthenticated checks if the user is currently authenticated with 1Password
 // For SDK-based integration, we check if we can list vaults
+// For CLI fallback, we check CLI authentication
 func (p *OnePasswordSDKProvider) IsAuthenticated() bool {
-	if !p.enabled || p.client == nil {
-		return false
+	if p.enabled && p.client != nil {
+		// Try to list vaults as an auth check
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_, err := p.client.Vaults().List(ctx)
+		return err == nil
 	}
-
-	// Try to list vaults as an auth check
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	_, err := p.client.Vaults().List(ctx)
-	return err == nil
+	
+	// Fall back to CLI provider
+	if p.cliProvider != nil && p.cliProvider.IsEnabled() {
+		return p.cliProvider.IsAuthenticated()
+	}
+	return false
 }
 
 // GetAuthenticationInstructions returns instructions for authenticating with 1Password SDK
@@ -216,33 +251,39 @@ func (p *OnePasswordSDKProvider) IsReference(value string) bool {
 	return strings.HasPrefix(value, "op://")
 }
 
-// ResolveSecret retrieves a secret from 1Password using the SDK
+// ResolveSecret retrieves a secret from 1Password using the SDK or CLI fallback
 // Reference format: op://vault/item/field
 // Example: op://Private/MyServer/password
 func (p *OnePasswordSDKProvider) ResolveSecret(reference string) (string, error) {
-	if !p.enabled || p.client == nil {
-		return "", fmt.Errorf("1Password SDK is not available - enable desktop app integration in 1Password settings")
-	}
-
 	if !p.IsReference(reference) {
 		return "", fmt.Errorf("not a 1Password reference: %s", reference)
 	}
 
-	// Use SDK's Resolve method which handles the full reference format
-	// This includes special characters, URL encoding, etc.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// Try SDK first
+	if p.enabled && p.client != nil {
+		// Use SDK's Resolve method which handles the full reference format
+		// This includes special characters, URL encoding, etc.
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-	secret, err := p.client.Secrets().Resolve(ctx, reference)
-	if err != nil {
-		// Check for authentication errors
-		if strings.Contains(err.Error(), "not authenticated") || strings.Contains(err.Error(), "authorization") {
-			return "", fmt.Errorf("not authenticated with 1Password - please unlock the desktop app: %w", err)
+		secret, err := p.client.Secrets().Resolve(ctx, reference)
+		if err != nil {
+			// Check for authentication errors
+			if strings.Contains(err.Error(), "not authenticated") || strings.Contains(err.Error(), "authorization") {
+				return "", fmt.Errorf("not authenticated with 1Password - please unlock the desktop app: %w", err)
+			}
+			return "", fmt.Errorf("failed to retrieve secret from 1Password SDK: %w", err)
 		}
-		return "", fmt.Errorf("failed to retrieve secret from 1Password: %w", err)
+
+		return secret, nil
 	}
 
-	return secret, nil
+	// Fall back to CLI provider
+	if p.cliProvider != nil && p.cliProvider.IsEnabled() {
+		return p.cliProvider.ResolveSecret(reference)
+	}
+
+	return "", fmt.Errorf("1Password is not available - neither SDK nor CLI is configured")
 }
 
 // ResolveIfReference resolves a value if it's a 1Password reference, otherwise returns it as-is
