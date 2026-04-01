@@ -36,8 +36,15 @@ func (l *Launcher) Launch(conn *models.Connection) error {
 		return fmt.Errorf("cannot launch a folder")
 	}
 
-	// Resolve 1Password reference if needed (make a copy to avoid modifying the original)
+	// Resolve 1Password references if needed (make a copy to avoid modifying the original)
 	resolvedConn := *conn
+	if l.onePasswordProvider.IsReference(conn.Username) {
+		resolved, err := l.onePasswordProvider.ResolveSecret(conn.Username)
+		if err != nil {
+			return fmt.Errorf("failed to resolve username from 1Password: %w", err)
+		}
+		resolvedConn.Username = resolved
+	}
 	if l.onePasswordProvider.IsReference(conn.Password) {
 		resolved, err := l.onePasswordProvider.ResolveSecret(conn.Password)
 		if err != nil {
@@ -601,17 +608,7 @@ func (l *Launcher) storeWindowsCredential(conn *models.Connection) error {
 		username = fmt.Sprintf("%s\\%s", conn.Domain, conn.Username)
 	}
 
-	// Use cmdkey to store the credential
-	// cmdkey /generic:TERMSRV/hostname /user:username /pass:password
-	cmd := exec.Command("cmdkey", "/generic:TERMSRV/"+target, "/user:"+username, "/pass:"+conn.Password)
-	hideConsoleWindow(cmd)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("cmdkey failed: %w, output: %s", err, string(output))
-	}
-
-	return nil
+	return writeWindowsCredential("TERMSRV/"+target, username, conn.Password)
 }
 
 // RemoveWindowsCredential removes RDP credentials from Windows Credential Manager
@@ -630,20 +627,7 @@ func (l *Launcher) RemoveWindowsCredential(conn *models.Connection) error {
 		target = fmt.Sprintf("%s:%d", conn.Host, port)
 	}
 
-	// Use cmdkey to delete the credential
-	// cmdkey /delete:TERMSRV/hostname
-	cmd := exec.Command("cmdkey", "/delete:TERMSRV/"+target)
-	hideConsoleWindow(cmd)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Don't return error if credential doesn't exist
-		if !strings.Contains(string(output), "not found") {
-			return fmt.Errorf("cmdkey delete failed: %w, output: %s", err, string(output))
-		}
-	}
-
-	return nil
+	return deleteWindowsCredential("TERMSRV/" + target)
 }
 
 // CleanupAllCredentials removes all MremoteGO-stored credentials from Windows Credential Manager
