@@ -33,6 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only when a Bitwarden reference is used, and terminated on exit. It is also
   placed in a Windows job object, and given a parent death signal on Linux, so
   it does not survive a crash.
+- Passwords are no longer passed on a command line, where any local process
+  could read them out of the process list:
+  - SSH on Windows uses PuTTY `-pwfile` with a private temporary file that is
+    deleted as soon as PuTTY has started, instead of `-pw`.
+  - SSH on Linux and macOS passes the password to `sshpass` through the
+    `SSHPASS` environment variable instead of `-p`; the temporary file is
+    removed by the generated snippet before `ssh` starts.
+  - RDP credentials are written to the Windows Credential Manager through the
+    API instead of `cmdkey /pass:`.
+
+### Known limitations
+- On Linux, `xfreerdp` is still invoked with `/p:<password>`.
 
 ## [1.0.4] - 2026-01-28
 
