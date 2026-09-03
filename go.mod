@@ -4,9 +4,10 @@ go 1.24.0
 
 require (
 	fyne.io/fyne/v2 v2.7.2
+	github.com/danieljoos/wincred v1.2.3
 	github.com/spf13/cobra v1.8.0
 	golang.org/x/crypto v0.47.0
-	golang.org/x/term v0.39.0
+	golang.org/x/sys v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -42,6 +43,5 @@ require (
 	github.com/yuin/goldmark v1.7.8 // indirect
 	golang.org/x/image v0.24.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 )

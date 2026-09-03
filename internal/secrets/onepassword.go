@@ -12,6 +12,17 @@ type OnePasswordProvider struct {
 	enabled bool
 }
 
+var (
+	_ Provider    = (*OnePasswordProvider)(nil)
+	_ ItemCreator = (*OnePasswordProvider)(nil)
+)
+
+// Name returns the human readable provider name.
+func (p *OnePasswordProvider) Name() string { return "1Password" }
+
+// Scheme returns the reference scheme handled by this provider.
+func (p *OnePasswordProvider) Scheme() string { return SchemeOnePassword }
+
 // NewOnePasswordProvider creates a new 1Password provider
 func NewOnePasswordProvider() *OnePasswordProvider {
 	return &OnePasswordProvider{
@@ -193,7 +204,11 @@ func (p *OnePasswordProvider) CheckItemExists(vault, title string) (string, bool
 
 // CreateItem creates a new Login item in 1Password
 // Returns the 1Password reference (op://vault/title/password)
-func (p *OnePasswordProvider) CreateItem(vault, title, username, password string) (string, error) {
+// The URI field of the request is ignored; 1Password items created here are
+// plain login items.
+func (p *OnePasswordProvider) CreateItem(req CreateItemRequest) (string, error) {
+	vault, title, username, password := req.Vault, req.Title, req.Username, req.Password
+
 	if !p.enabled {
 		return "", fmt.Errorf("1Password CLI is not available")
 	}

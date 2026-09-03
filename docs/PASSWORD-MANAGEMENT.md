@@ -7,6 +7,7 @@ MremoteGO provides flexible and secure password management with multiple options
 | Method | Security | Team Sharing | Auto-Login | Best For |
 |--------|----------|--------------|------------|----------|
 | 1Password | ✅ High | ✅ Yes | ✅ Yes | **Recommended** - Teams |
+| Bitwarden | ✅ High | ✅ Yes | ✅ Yes | **Recommended** - Teams, self-hosting |
 | Plain Text | ⚠️ Low | ❌ No | ✅ Yes | Personal/testing only |
 | No Password | ✅ Manual | N/A | ❌ No | SSH keys, certificates |
 
@@ -33,6 +34,35 @@ connections:
 - ✅ Biometric unlock
 - ✅ Automatic password rotation support
 - ✅ Audit logs
+
+## Bitwarden Integration (Recommended)
+
+Store passwords in Bitwarden, bitwarden.com or self-hosted, and reference them
+in config files.
+
+### Setup
+
+See [BITWARDEN-SETUP.md](BITWARDEN-SETUP.md) for complete setup instructions.
+
+### Usage
+
+```yaml
+connections:
+  - name: "My Server"
+    password: bw://8f3c1d9a-4e2b-4c77-9f10-1a2b3c4d5e6f  # Secure reference
+```
+
+References use the item id, so renaming an item does not break the config. A
+field can be selected explicitly with `bw://<item-id>/username`, `/totp` or
+`/notes`.
+
+### Benefits
+- ✅ Passwords never stored in config files
+- ✅ Safe to commit configs to git
+- ✅ Team password sharing
+- ✅ Works with self-hosted Bitwarden and Vaultwarden
+- ✅ Item picker built into the connection dialog
+- ✅ Master password never handled by MremoteGO
 
 ## Plain Text Passwords
 

@@ -8,6 +8,7 @@
 ## Security & Passwords
 
 - **[1Password Setup](1PASSWORD-SETUP.md)** - Secure password management with 1Password
+- **[Bitwarden Setup](BITWARDEN-SETUP.md)** - Secure password management with Bitwarden or Vaultwarden
 - **[Password Management](PASSWORD-MANAGEMENT.md)** - All password options and security details
 
 ## Main Documentation
@@ -21,6 +22,7 @@
 
 - [Add your first connection](QUICKSTART.md#first-connection)
 - [Set up 1Password](1PASSWORD-SETUP.md#quick-setup)
+- [Set up Bitwarden](BITWARDEN-SETUP.md#quick-setup)
 - [Organize connections](GUI-GUIDE.md#connection-tree)
 - [Share configs with team](1PASSWORD-SETUP.md#using-1password-references)
 
@@ -28,6 +30,7 @@
 
 - [RDP password issues](PASSWORD-MANAGEMENT.md#rdp-auto-login)
 - [1Password not working](1PASSWORD-SETUP.md#troubleshooting)
+- [Bitwarden not working](BITWARDEN-SETUP.md#troubleshooting)
 - [SSH connections failing](QUICKSTART.md#troubleshooting)
 - [GUI issues](GUI-GUIDE.md#troubleshooting)
 
@@ -38,6 +41,7 @@
 | `QUICKSTART.md` | 5-minute getting started guide |
 | `GUI-GUIDE.md` | Complete GUI interface documentation |
 | `1PASSWORD-SETUP.md` | Setting up 1Password integration |
+| `BITWARDEN-SETUP.md` | Setting up Bitwarden integration |
 | `PASSWORD-MANAGEMENT.md` | Security and password options |
 
 ## Contributing

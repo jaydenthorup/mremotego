@@ -13,6 +13,7 @@ import (
 	"github.com/jaydenthorup/mremotego/cmd/mremotego/cmd"
 	"github.com/jaydenthorup/mremotego/internal/config"
 	"github.com/jaydenthorup/mremotego/internal/gui"
+	"github.com/jaydenthorup/mremotego/internal/secrets"
 )
 
 func main() {
@@ -36,6 +37,11 @@ func runGUI() {
 	// Create Fyne application
 	myApp := app.NewWithID("com.mremotego.app")
 	myApp.Settings().SetTheme(&customTheme{})
+
+	// Secret providers may run helper processes; make sure they are stopped
+	// however the application exits.
+	myApp.Lifecycle().SetOnStopped(secrets.Shutdown)
+	defer secrets.Shutdown()
 
 	// Set application icon (ignore errors - icon is optional)
 	if icon := gui.GetAppIcon(); icon != nil {

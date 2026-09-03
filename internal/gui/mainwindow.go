@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/jaydenthorup/mremotego/internal/config"
 	"github.com/jaydenthorup/mremotego/internal/launcher"
+	"github.com/jaydenthorup/mremotego/internal/secrets"
 	"github.com/jaydenthorup/mremotego/pkg/models"
 )
 
@@ -557,50 +558,63 @@ func (w *MainWindow) showAbout() {
 func (w *MainWindow) Show() {
 	w.window.Show()
 
-	// Check 1Password CLI authentication status after window is shown
-	w.check1PasswordAuth()
+	// Check secret provider authentication status after window is shown
+	w.checkSecretProviderAuth()
 }
 
-// check1PasswordAuth checks if 1Password CLI needs authentication
-func (w *MainWindow) check1PasswordAuth() {
-	// Check if there are any 1Password references in use
-	hasOpReferences := false
+// checkSecretProviderAuth warns about secret providers that are referenced by a
+// connection but cannot currently deliver secrets.
+func (w *MainWindow) checkSecretProviderAuth() {
+	registry := w.launcher.Secrets()
+
+	// Collect the providers actually referenced by the configuration; there is
+	// no point asking the user to sign in to a provider they do not use.
+	var used []secrets.Provider
+	seen := make(map[string]bool)
 	var checkConnections func([]*models.Connection)
 	checkConnections = func(conns []*models.Connection) {
 		for _, conn := range conns {
 			if conn.IsFolder() {
 				checkConnections(conn.Children)
-			} else if strings.HasPrefix(conn.Password, "op://") {
-				hasOpReferences = true
-				return
+				continue
+			}
+			if provider, ok := registry.ProviderFor(conn.Password); ok && !seen[provider.Scheme()] {
+				seen[provider.Scheme()] = true
+				used = append(used, provider)
 			}
 		}
 	}
 	checkConnections(w.manager.GetConfig().Connections)
 
-	// Only check if there are actually 1Password references in use
-	if !hasOpReferences {
+	if len(used) == 0 {
 		return
 	}
 
-	// Check if 1Password CLI is authenticated
-	opProvider := w.launcher.GetOnePasswordProvider()
-	if opProvider.IsEnabled() && !opProvider.IsAuthenticated() {
-		// Show a helpful dialog
-		content := widget.NewLabel(opProvider.GetAuthenticationInstructions())
-		content.Wrapping = fyne.TextWrapWord
+	// Checking authentication can start a helper process and talk to it, so it
+	// must not run on the UI goroutine.
+	go func() {
+		for _, provider := range used {
+			if !provider.IsEnabled() || provider.IsAuthenticated() {
+				continue
+			}
 
-		scrollContainer := container.NewVScroll(content)
-		scrollContainer.SetMinSize(fyne.NewSize(600, 400))
+			title := provider.Name() + " Not Authenticated"
+			instructions := provider.GetAuthenticationInstructions()
 
-		dialog.ShowCustom(
-			"1Password CLI Not Authenticated",
-			"OK",
-			scrollContainer,
-			w.window,
-		)
-	}
-} // Reload refreshes the window with the loaded config
+			fyne.Do(func() {
+				content := widget.NewLabel(instructions)
+				content.Wrapping = fyne.TextWrapWord
+
+				scrollContainer := container.NewVScroll(content)
+				scrollContainer.SetMinSize(fyne.NewSize(600, 400))
+
+				dialog.ShowCustom(title, "OK", scrollContainer, w.window)
+			})
+		}
+	}()
+}
+
+// Reload refreshes the window with the loaded config
 func (w *MainWindow) Reload() {
 	w.buildConnectionMap()
 	w.tree.Refresh()

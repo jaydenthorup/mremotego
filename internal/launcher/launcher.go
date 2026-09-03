@@ -15,19 +15,20 @@ import (
 
 // Launcher handles launching connections
 type Launcher struct {
-	onePasswordProvider *secrets.OnePasswordProvider
+	secrets *secrets.Registry
 }
 
 // NewLauncher creates a new launcher
 func NewLauncher() *Launcher {
 	return &Launcher{
-		onePasswordProvider: secrets.NewOnePasswordProvider(),
+		secrets: secrets.Default(),
 	}
 }
 
-// GetOnePasswordProvider returns the 1Password provider for checking authentication status
-func (l *Launcher) GetOnePasswordProvider() *secrets.OnePasswordProvider {
-	return l.onePasswordProvider
+// Secrets returns the secret provider registry, for example to check
+// authentication status before launching a connection.
+func (l *Launcher) Secrets() *secrets.Registry {
+	return l.secrets
 }
 
 // Launch launches a connection based on its protocol
@@ -36,18 +37,19 @@ func (l *Launcher) Launch(conn *models.Connection) error {
 		return fmt.Errorf("cannot launch a folder")
 	}
 
-	// Resolve 1Password reference if needed (make a copy to avoid modifying the original)
+	// Resolve a secret manager reference if needed (make a copy to avoid
+	// modifying the original)
 	resolvedConn := *conn
-	if l.onePasswordProvider.IsReference(conn.Password) {
-		resolved, err := l.onePasswordProvider.ResolveSecret(conn.Password)
+	if provider, ok := l.secrets.ProviderFor(conn.Password); ok {
+		resolved, err := provider.ResolveSecret(conn.Password)
 		if err != nil {
 			// For RDP, we can continue without a password (will prompt)
 			// For other protocols that require a password, return the error
 			if conn.Protocol != models.ProtocolRDP {
-				return fmt.Errorf("failed to resolve password from 1Password: %w", err)
+				return fmt.Errorf("failed to resolve password from %s: %w", provider.Name(), err)
 			}
-			// RDP: Clear the password so it doesn't try to use the op:// reference
-			fmt.Printf("Warning: Failed to resolve password from 1Password: %v (RDP will prompt for credentials)\n", err)
+			// RDP: Clear the password so it doesn't try to use the reference
+			fmt.Printf("Warning: Failed to resolve password from %s: %v (RDP will prompt for credentials)\n", provider.Name(), err)
 			resolvedConn.Password = ""
 		} else {
 			resolvedConn.Password = resolved
