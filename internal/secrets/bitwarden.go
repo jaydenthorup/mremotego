@@ -290,12 +290,36 @@ func (p *BitwardenProvider) startServer() (*bwClient, *bwServer, error) {
 
 	client := newBwClient(server.baseURL)
 	if err := waitForReady(context.Background(), client, server.exited); err != nil {
+		tail := server.StderrTail()
 		server.Stop()
-		if tail := server.StderrTail(); tail != "" {
+
+		// The CLI refuses to start the server at all when no user is logged in,
+		// and prints the reason on stderr. Report that as the vault state
+		// rather than as a start-up failure, so the caller can offer the right
+		// advice.
+		if stateErr := classifyStartupFailure(tail); stateErr != nil {
+			return nil, nil, stateErr
+		}
+		if tail != "" {
 			return nil, nil, fmt.Errorf("%w: %s", err, tail)
 		}
 		return nil, nil, err
 	}
 
 	return client, server, nil
+}
+
+// classifyStartupFailure maps the CLI output of a server that refused to start
+// onto a vault state error, or returns nil when the output does not name one.
+func classifyStartupFailure(output string) error {
+	lower := strings.ToLower(output)
+
+	switch {
+	case strings.Contains(lower, "not logged in"):
+		return ErrNotAuthenticated
+	case strings.Contains(lower, "vault is locked"), strings.Contains(lower, "vault is locked."):
+		return ErrVaultLocked
+	}
+
+	return nil
 }
