@@ -14,18 +14,18 @@ import (
 
 // Manager handles configuration file operations
 type Manager struct {
-	configPath          string
-	config              *models.Config
-	onePasswordProvider *secrets.OnePasswordProvider
-	encryptionProvider  *crypto.EncryptionProvider
+	configPath         string
+	config             *models.Config
+	secrets            *secrets.Registry
+	encryptionProvider *crypto.EncryptionProvider
 }
 
 // NewManager creates a new configuration manager
 func NewManager(configPath string) *Manager {
 	return &Manager{
-		configPath:          configPath,
-		onePasswordProvider: secrets.NewOnePasswordProvider(),
-		encryptionProvider:  nil, // Will be set when master password is provided
+		configPath:         configPath,
+		secrets:            secrets.Default(),
+		encryptionProvider: nil, // Will be set when master password is provided
 	}
 }
 
@@ -382,14 +382,31 @@ func (m *Manager) UpdateConnection(name string, updates *models.Connection) erro
 	return nil
 }
 
-// IsOnePasswordReference checks if a password is a 1Password reference
-func (m *Manager) IsOnePasswordReference(password string) bool {
-	return m.onePasswordProvider.IsReference(password)
+// Secrets returns the secret provider registry used by this manager.
+func (m *Manager) Secrets() *secrets.Registry {
+	return m.secrets
 }
 
-// CreateOnePasswordItem creates a new 1Password item and returns the reference
-func (m *Manager) CreateOnePasswordItem(vault, title, username, password string) (string, error) {
-	return m.onePasswordProvider.CreateItem(vault, title, username, password)
+// IsSecretReference reports whether a password is a reference handled by one of
+// the configured secret providers, for example "op://" or "bw://".
+func (m *Manager) IsSecretReference(password string) bool {
+	return m.secrets.IsReference(password)
+}
+
+// CreateSecretItem stores a login item in the provider identified by scheme and
+// returns the reference that should be written to the configuration.
+func (m *Manager) CreateSecretItem(scheme string, req secrets.CreateItemRequest) (string, error) {
+	provider, ok := m.secrets.ByScheme(scheme)
+	if !ok {
+		return "", fmt.Errorf("unknown secret provider: %s", scheme)
+	}
+
+	creator, ok := provider.(secrets.ItemCreator)
+	if !ok {
+		return "", fmt.Errorf("%s cannot create items", provider.Name())
+	}
+
+	return creator.CreateItem(req)
 }
 
 // saveRecentFile saves the current config path as the most recently used file

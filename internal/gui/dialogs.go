@@ -1,7 +1,6 @@
 package gui
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -110,7 +109,7 @@ func (w *MainWindow) showAddConnectionDialog() {
 	usernameEntry.SetPlaceHolder("username")
 
 	passwordEntry := widget.NewEntry()
-	passwordEntry.SetPlaceHolder("password or op://vault/item/field")
+	passwordEntry.SetPlaceHolder(passwordPlaceholder)
 
 	domainEntry := widget.NewEntry()
 	domainEntry.SetPlaceHolder("domain (for RDP)")
@@ -127,34 +126,24 @@ func (w *MainWindow) showAddConnectionDialog() {
 	folderSelect := widget.NewSelect(folderNames, nil)
 	folderSelect.SetSelected("(Root)")
 
-	// 1Password integration
-	storeTo1PasswordCheck := widget.NewCheck("Store password in 1Password", nil)
-	vaultSelect := widget.NewSelect([]string{"DevOps", "Private", "Employee"}, nil)
-	vaultSelect.SetSelected("DevOps")
-	vaultSelect.Hide()
+	// Password manager integration
+	secretStore := w.newSecretStoreControls(usernameEntry, passwordEntry)
 
-	storeTo1PasswordCheck.OnChanged = func(checked bool) {
-		if checked {
-			vaultSelect.Show()
-		} else {
-			vaultSelect.Hide()
-		}
+	items := []*widget.FormItem{
+		{Text: "Name", Widget: nameEntry},
+		{Text: "Protocol", Widget: protocolSelect},
+		{Text: "Host", Widget: hostEntry},
+		{Text: "Port", Widget: portEntry},
+		{Text: "Username", Widget: usernameEntry},
+		{Text: "Password", Widget: secretStore.passwordWidget(passwordEntry)},
+		{Text: "Domain", Widget: domainEntry},
+		{Text: "Description", Widget: descriptionEntry},
+		{Text: "Folder", Widget: folderSelect},
 	}
+	items = append(items, secretStore.formItems()...)
 
 	form := &widget.Form{
-		Items: []*widget.FormItem{
-			{Text: "Name", Widget: nameEntry},
-			{Text: "Protocol", Widget: protocolSelect},
-			{Text: "Host", Widget: hostEntry},
-			{Text: "Port", Widget: portEntry},
-			{Text: "Username", Widget: usernameEntry},
-			{Text: "Password", Widget: passwordEntry},
-			{Text: "Domain", Widget: domainEntry},
-			{Text: "Description", Widget: descriptionEntry},
-			{Text: "Folder", Widget: folderSelect},
-			{Text: "", Widget: storeTo1PasswordCheck},
-			{Text: "Vault", Widget: vaultSelect},
-		},
+		Items: items,
 		OnSubmit: func() {
 			conn := models.NewConnection(nameEntry.Text, models.Protocol(protocolSelect.Selected))
 			conn.Host = hostEntry.Text
@@ -173,17 +162,17 @@ func (w *MainWindow) showAddConnectionDialog() {
 				conn.Port = conn.Protocol.GetDefaultPort()
 			}
 
-			// If user wants to store in 1Password, create the item
-			if storeTo1PasswordCheck.Checked && conn.Password != "" && !w.manager.IsOnePasswordReference(conn.Password) {
-				vault := vaultSelect.Selected
-				reference, err := w.manager.CreateOnePasswordItem(vault, conn.Name, conn.Username, conn.Password)
-				if err != nil {
-					dialog.ShowError(fmt.Errorf("Failed to create 1Password item: %w", err), w.window)
-					return
-				}
-				// Replace password with 1Password reference
-				conn.Password = reference
-				dialog.ShowInformation("Success", fmt.Sprintf("Password stored in 1Password vault '%s'", vault), w.window)
+			// If requested, push the password to a password manager and keep
+			// only the reference in the configuration.
+			value, providerName, err := secretStore.storeIfRequested(
+				conn.Name, conn.Username, conn.Password, string(conn.Protocol), conn.Host)
+			if err != nil {
+				dialog.ShowError(err, w.window)
+				return
+			}
+			conn.Password = value
+			if providerName != "" {
+				dialog.ShowInformation("Success", "Password stored in "+providerName, w.window)
 			}
 
 			// Add to selected folder or root
@@ -303,48 +292,37 @@ func (w *MainWindow) showEditConnectionDialog(conn *models.Connection) {
 	folderSelect := widget.NewSelect(folderNames, nil)
 	folderSelect.SetSelected(currentFolder)
 
-	// 1Password integration for edit
-	storeTo1PasswordCheck := widget.NewCheck("Push password to 1Password", nil)
-	vaultSelect := widget.NewSelect([]string{"DevOps", "Private", "Employee"}, nil)
-	vaultSelect.SetSelected("DevOps")
-	vaultSelect.Hide()
+	// Password manager integration
+	secretStore := w.newSecretStoreControls(usernameEntry, passwordEntry)
 
-	storeTo1PasswordCheck.OnChanged = func(checked bool) {
-		if checked {
-			vaultSelect.Show()
-		} else {
-			vaultSelect.Hide()
-		}
+	items := []*widget.FormItem{
+		{Text: "Name", Widget: nameEntry},
+		{Text: "Protocol", Widget: protocolSelect},
+		{Text: "Host", Widget: hostEntry},
+		{Text: "Port", Widget: portEntry},
+		{Text: "Username", Widget: usernameEntry},
+		{Text: "Password", Widget: secretStore.passwordWidget(passwordEntry)},
+		{Text: "Domain", Widget: domainEntry},
+		{Text: "Description", Widget: descriptionEntry},
+		{Text: "Folder", Widget: folderSelect},
 	}
+	items = append(items, secretStore.formItems()...)
 
 	form := &widget.Form{
-		Items: []*widget.FormItem{
-			{Text: "Name", Widget: nameEntry},
-			{Text: "Protocol", Widget: protocolSelect},
-			{Text: "Host", Widget: hostEntry},
-			{Text: "Port", Widget: portEntry},
-			{Text: "Username", Widget: usernameEntry},
-			{Text: "Password", Widget: passwordEntry},
-			{Text: "Domain", Widget: domainEntry},
-			{Text: "Description", Widget: descriptionEntry},
-			{Text: "Folder", Widget: folderSelect},
-			{Text: "", Widget: storeTo1PasswordCheck},
-			{Text: "Vault", Widget: vaultSelect},
-		},
+		Items: items,
 		OnSubmit: func() {
-			// If user wants to push password to 1Password
-			if storeTo1PasswordCheck.Checked && passwordEntry.Text != "" && !w.manager.IsOnePasswordReference(passwordEntry.Text) {
-				vault := vaultSelect.Selected
-				reference, err := w.manager.CreateOnePasswordItem(vault, nameEntry.Text, usernameEntry.Text, passwordEntry.Text)
-				if err != nil {
-					dialog.ShowError(fmt.Errorf("Failed to create 1Password item: %w", err), w.window)
-					return
-				}
-				// Replace password with 1Password reference
-				conn.Password = reference
-				dialog.ShowInformation("Success", fmt.Sprintf("Password stored in 1Password vault '%s'", vault), w.window)
-			} else {
-				conn.Password = passwordEntry.Text
+			// If requested, push the password to a password manager and keep
+			// only the reference in the configuration.
+			value, providerName, err := secretStore.storeIfRequested(
+				nameEntry.Text, usernameEntry.Text, passwordEntry.Text,
+				protocolSelect.Selected, hostEntry.Text)
+			if err != nil {
+				dialog.ShowError(err, w.window)
+				return
+			}
+			conn.Password = value
+			if providerName != "" {
+				dialog.ShowInformation("Success", "Password stored in "+providerName, w.window)
 			}
 
 			conn.Name = nameEntry.Text

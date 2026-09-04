@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Bitwarden integration**: connection passwords can be stored as `bw://<item-id>`
+  references and are resolved through the Bitwarden CLI at connect time. Works
+  with bitwarden.com, self-hosted Bitwarden and Vaultwarden.
+  See [docs/BITWARDEN-SETUP.md](docs/BITWARDEN-SETUP.md).
+- Optional field selector on references: `bw://<item-id>/username`, `/totp`,
+  `/notes`; the password is the default.
+- **Bitwarden item picker** in the add and edit connection dialogs, with search
+  and a vault sync button, plus a "Store password in Bitwarden" option that
+  creates a login item and replaces the password with its reference.
+- Secret provider abstraction (`secrets.Provider`, `secrets.Registry`), so the
+  configuration manager, launcher and GUI no longer depend on a single password
+  manager.
+- Unit tests for the secret providers, reference parsing and the encryption
+  helper, plus a `go test ./...` step in CI.
+
+### Changed
+- The 1Password authentication warning at start-up is now a generic secret
+  provider check, runs off the UI goroutine, and only asks about providers that
+  the configuration actually references.
+
+### Security
+- The `bw serve` helper process is bound to loopback on a random port, started
+  only when a Bitwarden reference is used, and terminated on exit. It is also
+  placed in a Windows job object, and given a parent death signal on Linux, so
+  it does not survive a crash.
+- Passwords are no longer passed on a command line, where any local process
+  could read them out of the process list:
+  - SSH on Windows uses PuTTY `-pwfile` with a private temporary file that is
+    deleted as soon as PuTTY has started, instead of `-pw`.
+  - SSH on Linux and macOS passes the password to `sshpass` through the
+    `SSHPASS` environment variable instead of `-p`; the temporary file is
+    removed by the generated snippet before `ssh` starts.
+  - RDP credentials are written to the Windows Credential Manager through the
+    API instead of `cmdkey /pass:`.
+
+### Known limitations
+- On Linux, `xfreerdp` is still invoked with `/p:<password>`.
+
 ## [1.0.4] - 2026-01-28
 
 ### Fixed

@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/jaydenthorup/mremotego/internal/config"
+	"github.com/jaydenthorup/mremotego/internal/secrets"
 )
 
 var (
@@ -21,7 +22,13 @@ in a human-readable YAML format that works great with version control.`,
 
 // Execute runs the root command
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	err := rootCmd.Execute()
+
+	// Stop helper processes started by secret providers. This cannot be a
+	// defer because the error path calls os.Exit.
+	secrets.Shutdown()
+
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

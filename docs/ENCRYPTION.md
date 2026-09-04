@@ -14,7 +14,7 @@ MremoteGO supports encrypting passwords at rest in the configuration file using 
 - **AES-256-GCM**: Industry-standard authenticated encryption
 - **Unique Salt**: Each password gets a random 16-byte salt
 - **Random Nonce**: Each encryption uses a unique nonce
-- **1Password Integration**: 1Password references (`op://...`) are NOT encrypted (no need)
+- **Password Manager Integration**: references (`op://...`, `bw://...`) are NOT encrypted (no need)
 
 ## Using Encryption in the GUI
 

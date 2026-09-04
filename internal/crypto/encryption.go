@@ -10,6 +10,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/jaydenthorup/mremotego/internal/secrets"
 	"golang.org/x/crypto/pbkdf2"
 )
 
@@ -172,7 +173,8 @@ func (p *EncryptionProvider) DecryptIfNeeded(value string) (string, error) {
 }
 
 // ShouldEncrypt checks if a value should be encrypted
-// Returns false for empty strings, 1Password references, or already encrypted values
+// Returns false for empty strings, secret manager references, or already
+// encrypted values
 func (p *EncryptionProvider) ShouldEncrypt(value string) bool {
 	if !p.enabled || value == "" {
 		return false
@@ -183,8 +185,9 @@ func (p *EncryptionProvider) ShouldEncrypt(value string) bool {
 		return false
 	}
 
-	// Don't encrypt 1Password references
-	if strings.HasPrefix(value, "op://") {
+	// Don't encrypt references to an external secret manager; they contain no
+	// secret material and stay readable so configs remain diffable in git.
+	if secrets.IsKnownReference(value) {
 		return false
 	}
 

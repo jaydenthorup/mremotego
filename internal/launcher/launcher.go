@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jaydenthorup/mremotego/internal/secrets"
 	"github.com/jaydenthorup/mremotego/pkg/models"
@@ -15,19 +16,23 @@ import (
 
 // Launcher handles launching connections
 type Launcher struct {
-	onePasswordProvider *secrets.OnePasswordProvider
+	secrets *secrets.Registry
 }
 
 // NewLauncher creates a new launcher
 func NewLauncher() *Launcher {
+	// Remove password files left behind by a run that was killed.
+	cleanupStalePasswordFiles()
+
 	return &Launcher{
-		onePasswordProvider: secrets.NewOnePasswordProvider(),
+		secrets: secrets.Default(),
 	}
 }
 
-// GetOnePasswordProvider returns the 1Password provider for checking authentication status
-func (l *Launcher) GetOnePasswordProvider() *secrets.OnePasswordProvider {
-	return l.onePasswordProvider
+// Secrets returns the secret provider registry, for example to check
+// authentication status before launching a connection.
+func (l *Launcher) Secrets() *secrets.Registry {
+	return l.secrets
 }
 
 // Launch launches a connection based on its protocol
@@ -36,18 +41,19 @@ func (l *Launcher) Launch(conn *models.Connection) error {
 		return fmt.Errorf("cannot launch a folder")
 	}
 
-	// Resolve 1Password reference if needed (make a copy to avoid modifying the original)
+	// Resolve a secret manager reference if needed (make a copy to avoid
+	// modifying the original)
 	resolvedConn := *conn
-	if l.onePasswordProvider.IsReference(conn.Password) {
-		resolved, err := l.onePasswordProvider.ResolveSecret(conn.Password)
+	if provider, ok := l.secrets.ProviderFor(conn.Password); ok {
+		resolved, err := provider.ResolveSecret(conn.Password)
 		if err != nil {
 			// For RDP, we can continue without a password (will prompt)
 			// For other protocols that require a password, return the error
 			if conn.Protocol != models.ProtocolRDP {
-				return fmt.Errorf("failed to resolve password from 1Password: %w", err)
+				return fmt.Errorf("failed to resolve password from %s: %w", provider.Name(), err)
 			}
-			// RDP: Clear the password so it doesn't try to use the op:// reference
-			fmt.Printf("Warning: Failed to resolve password from 1Password: %v (RDP will prompt for credentials)\n", err)
+			// RDP: Clear the password so it doesn't try to use the reference
+			fmt.Printf("Warning: Failed to resolve password from %s: %v (RDP will prompt for credentials)\n", provider.Name(), err)
 			resolvedConn.Password = ""
 		} else {
 			resolvedConn.Password = resolved
@@ -92,9 +98,17 @@ func (l *Launcher) launchSSH(conn *models.Connection) error {
 			args = append(args, "-l", conn.Username)
 		}
 
-		// Add password if provided (for auto-login)
+		// Add password if provided (for auto-login). PuTTY documents -pw as
+		// insecure because the command line is visible to every local process,
+		// so the password is handed over in a private file instead.
+		cleanup := func() {}
 		if conn.Password != "" {
-			args = append(args, "-pw", conn.Password)
+			passwordFile, remove, err := writePasswordFile(conn.Password)
+			if err != nil {
+				return fmt.Errorf("failed to prepare password for PuTTY: %w", err)
+			}
+			cleanup = remove
+			args = append(args, "-pwfile", passwordFile)
 		}
 
 		// Add extra args if provided
@@ -109,9 +123,16 @@ func (l *Launcher) launchSSH(conn *models.Connection) error {
 		cmd := exec.Command("putty.exe", args...)
 		// Don't hide putty - it's a GUI application we want to see
 		if err := cmd.Start(); err != nil {
+			cleanup()
 			// Fall back to ssh command
 			return l.launchSSHFallback(conn)
 		}
+
+		// PuTTY reads the password file while parsing its arguments, so it can
+		// be removed as soon as the process is up. Waiting for the process also
+		// covers the case where it fails immediately.
+		go removeAfterStart(cmd, cleanup)
+
 		return nil
 	}
 
@@ -149,64 +170,101 @@ func (l *Launcher) launchSSHFallback(conn *models.Connection) error {
 	}
 
 	var cmd *exec.Cmd
+	cleanup := func() {}
 
 	// If password is provided, try to use sshpass (if available)
 	if conn.Password != "" {
 		// Check if sshpass is available
 		if _, err := exec.LookPath("sshpass"); err == nil {
-			// Use sshpass to provide password
-			sshpassArgs := []string{"-p", conn.Password, "ssh"}
-			sshpassArgs = append(sshpassArgs, args...)
+			passwordFile, remove, err := writePasswordFile(conn.Password)
+			if err != nil {
+				return fmt.Errorf("failed to prepare password for sshpass: %w", err)
+			}
+			cleanup = remove
 
-			// Launch in a terminal emulator
-			cmd = l.launchInTerminal("sshpass", sshpassArgs...)
+			// sshpass -p would expose the password in the process list. The
+			// password cannot be passed through the environment either,
+			// because terminal emulators do not forward it, so the generated
+			// shell snippet reads the file and deletes it before ssh starts.
+			cmd = l.launchInTerminal(sshpassCommand(passwordFile, args), nil, conn.Host)
 		} else {
 			// sshpass not available, just use ssh (will prompt for password)
-			cmd = l.launchInTerminal("ssh", args...)
+			cmd = l.launchInTerminal(shellCommand("ssh", args...), append([]string{"ssh"}, args...), conn.Host)
 		}
 	} else {
-		cmd = l.launchInTerminal("ssh", args...)
+		cmd = l.launchInTerminal(shellCommand("ssh", args...), append([]string{"ssh"}, args...), conn.Host)
 	}
 
 	if cmd == nil {
+		cleanup()
 		return fmt.Errorf("failed to create terminal command")
 	}
 
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		cleanup()
+		return err
+	}
+
+	// The shell snippet deletes the file itself; this only covers a terminal
+	// that never ran it.
+	time.AfterFunc(staleCleanupDelay, cleanup)
+
+	return nil
 }
 
-// launchInTerminal launches a command in a terminal emulator
-func (l *Launcher) launchInTerminal(command string, args ...string) *exec.Cmd {
-	// Build the command with proper shell quoting
-	cmdParts := []string{command}
-	cmdParts = append(cmdParts, args...)
+// removeAfterStart runs cleanup once the process has exited or after a short
+// grace period, whichever comes first.
+func removeAfterStart(cmd *exec.Cmd, cleanup func()) {
+	done := make(chan struct{})
+	go func() {
+		_ = cmd.Wait()
+		close(done)
+	}()
 
-	// Join command parts, using shell quoting for safety
-	var quotedParts []string
-	for _, part := range cmdParts {
-		// Use single quotes and escape any single quotes in the string
-		quotedParts = append(quotedParts, fmt.Sprintf("'%s'", strings.ReplaceAll(part, "'", "'\\''")))
+	select {
+	case <-done:
+	case <-time.After(passwordFileGrace):
 	}
-	fullCmd := strings.Join(quotedParts, " ")
 
+	cleanup()
+}
+
+// shellCommand quotes a command and its arguments for execution by a shell.
+func shellCommand(command string, args ...string) string {
+	parts := append([]string{command}, args...)
+
+	quoted := make([]string, 0, len(parts))
+	for _, part := range parts {
+		quoted = append(quoted, "'"+strings.ReplaceAll(part, "'", `'\''`)+"'")
+	}
+
+	return strings.Join(quoted, " ")
+}
+
+// sshpassCommand builds a shell snippet that reads the password from a file
+// into the environment and removes the file before ssh is executed, so the
+// secret appears neither in the process list nor on disk for longer than
+// necessary.
+func sshpassCommand(passwordFile string, sshArgs []string) string {
+	quotedFile := "'" + strings.ReplaceAll(passwordFile, "'", `'\''`) + "'"
+
+	return fmt.Sprintf(
+		"SSHPASS=\"$(head -n 1 %s)\"; rm -f %s; export SSHPASS; %s",
+		quotedFile,
+		quotedFile,
+		shellCommand("sshpass", append([]string{"-e", "ssh"}, sshArgs...)...),
+	)
+}
+
+// launchInTerminal launches a shell snippet in a terminal emulator.
+//
+// fullCmd is the snippet to run. argv is the equivalent argument vector and is
+// only used on systems where no terminal emulator is available. hostname names
+// the host being connected to and is used for the host key hint on Linux.
+func (l *Launcher) launchInTerminal(fullCmd string, argv []string, hostname string) *exec.Cmd {
 	// For SSH commands on Linux, wrap with error detection for host key changes
 	var wrappedCmd string
-	if runtime.GOOS == "linux" && (command == "ssh" || command == "sshpass") {
-		// Extract hostname from args for ssh-keygen -R
-		hostname := ""
-		for i, arg := range args {
-			if !strings.HasPrefix(arg, "-") && i > 0 {
-				// This is likely the hostname or user@hostname
-				parts := strings.Split(arg, "@")
-				if len(parts) > 1 {
-					hostname = parts[1]
-				} else {
-					hostname = arg
-				}
-				break
-			}
-		}
-
+	if runtime.GOOS == "linux" && hostname != "" {
 		// Create wrapper that detects host key mismatch and shows helpful message
 		// Use a temp file to capture stderr for error detection
 		wrappedCmd = fmt.Sprintf(`
@@ -280,7 +338,19 @@ func (l *Launcher) launchInTerminal(command string, args ...string) *exec.Cmd {
 
 	// Fallback: try to run without terminal (will need stdin/stdout)
 	fmt.Println("Fallback: Running without terminal")
-	cmd := exec.Command(command, args...)
+
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		// Windows has no POSIX shell to interpret the snippet, and sshpass does
+		// not exist there, so the argument vector is always safe to run.
+		if len(argv) == 0 {
+			return nil
+		}
+		cmd = exec.Command(argv[0], argv[1:]...)
+	} else {
+		cmd = exec.Command("sh", "-c", wrappedCmd)
+	}
+
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -601,14 +671,11 @@ func (l *Launcher) storeWindowsCredential(conn *models.Connection) error {
 		username = fmt.Sprintf("%s\\%s", conn.Domain, conn.Username)
 	}
 
-	// Use cmdkey to store the credential
-	// cmdkey /generic:TERMSRV/hostname /user:username /pass:password
-	cmd := exec.Command("cmdkey", "/generic:TERMSRV/"+target, "/user:"+username, "/pass:"+conn.Password)
-	hideConsoleWindow(cmd)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("cmdkey failed: %w, output: %s", err, string(output))
+	// Write the credential through the Credential Manager API. Using cmdkey
+	// here would put the password on a command line, where any local process
+	// could read it.
+	if err := writeGenericCredential("TERMSRV/"+target, username, conn.Password); err != nil {
+		return fmt.Errorf("failed to store credential for %s: %w", target, err)
 	}
 
 	return nil
@@ -630,17 +697,9 @@ func (l *Launcher) RemoveWindowsCredential(conn *models.Connection) error {
 		target = fmt.Sprintf("%s:%d", conn.Host, port)
 	}
 
-	// Use cmdkey to delete the credential
-	// cmdkey /delete:TERMSRV/hostname
-	cmd := exec.Command("cmdkey", "/delete:TERMSRV/"+target)
-	hideConsoleWindow(cmd)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Don't return error if credential doesn't exist
-		if !strings.Contains(string(output), "not found") {
-			return fmt.Errorf("cmdkey delete failed: %w, output: %s", err, string(output))
-		}
+	// Delete through the Credential Manager API; a missing credential is fine.
+	if err := deleteGenericCredential("TERMSRV/" + target); err != nil {
+		return fmt.Errorf("failed to remove credential for %s: %w", target, err)
 	}
 
 	return nil

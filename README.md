@@ -1,8 +1,8 @@
 # MremoteGO
 
-> A modern, cross-platform remote connection manager with git-friendly YAML configs and 1Password integration.
+> A modern, cross-platform remote connection manager with git-friendly YAML configs and 1Password and Bitwarden integration.
 
-[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](https://github.com/jaydenthorup/mremotego)
 
@@ -10,13 +10,14 @@
 
 **The Problem**: mRemoteNG uses XML configs that are painful to diff, merge, and share with teams. Passwords are awkwardly encrypted per-machine.
 
-**The Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus optional 1Password integration for secure team password sharing.
+**The Solution**: MremoteGO uses clean YAML configs that work beautifully with git, plus optional 1Password and Bitwarden integration for secure team password sharing.
 
 ## ✨ Features
 
 - 🎨 **Modern GUI** - Clean interface with connection tree, search, and quick actions
 - 🔐 **Password Encryption** - AES-256-GCM encryption at rest with master password
 - 🔑 **1Password Integration** - Store passwords securely using `op://` references
+- 🛡️ **Bitwarden Integration** - Store passwords in Bitwarden or Vaultwarden using `bw://` references
 - 📝 **Git-Friendly** - YAML configs are easy to diff, merge, and review
 - 🖥️ **Cross-Platform** - Windows, Linux, macOS (AMD64 & ARM64)
 - ⚡ **Fast** - Native GUI with instant connections
@@ -69,7 +70,7 @@ Simply run the executable without arguments:
 
 1. Click **[+]** or press `Ctrl+N`
 2. Fill in connection details (name, protocol, host, credentials)
-3. Optionally push password to 1Password
+3. Optionally pick a password from Bitwarden, or push it to 1Password or Bitwarden
 4. Click **Save**
 
 **Connecting:**
@@ -145,13 +146,14 @@ connections:
         host: dev.example.com
         port: 3389
         username: developer
+        password: bw://8f3c1d9a-4e2b-4c77-9f10-1a2b3c4d5e6f  # Bitwarden reference
 ```
 
 ## 🔐 Security
 
 ### Password Storage Options
 
-MremoteGO supports three password storage methods:
+MremoteGO supports four password storage methods:
 
 1. **1Password Integration** (Recommended for teams):
    - Store passwords securely in 1Password vaults
@@ -160,20 +162,27 @@ MremoteGO supports three password storage methods:
    - Supports biometric unlock
    - See [1Password Setup Guide](docs/1PASSWORD-SETUP.md)
 
-2. **Encrypted** (Recommended for local use):
+2. **Bitwarden Integration** (Recommended for teams):
+   - Store passwords in Bitwarden, self-hosted Bitwarden or Vaultwarden
+   - Use `bw://item-id` references in your config
+   - Safe to commit configs to git
+   - Pick items from the vault directly in the connection dialog
+   - See [Bitwarden Setup Guide](docs/BITWARDEN-SETUP.md)
+
+3. **Encrypted** (Recommended for local use):
    - AES-256-GCM encryption with PBKDF2 key derivation (100,000 iterations)
    - Master password required on startup
    - Passwords stored as `enc:base64(salt+nonce+ciphertext)`
    - See [Encryption Guide](docs/ENCRYPTION.md)
 
-3. **Plain Text** (Not recommended):
+4. **Plain Text** (Not recommended):
    - For testing or when other methods aren't suitable
    - Should not be committed to git
    - Use `.gitignore` to exclude `connections.yaml` and `config.yaml`
 
 ### Best Practices
 
-- ✅ Use 1Password for team environments
+- ✅ Use 1Password or Bitwarden for team environments
 - ✅ Use encryption for personal configs
 - ✅ Add `config.yaml` and `connections.yaml` to `.gitignore`
 - ✅ Use separate configs for different environments
@@ -186,13 +195,14 @@ MremoteGO supports three password storage methods:
 - **[GUI Guide](docs/GUI-GUIDE.md)** - Complete GUI reference
 - **[Encryption Guide](docs/ENCRYPTION.md)** - Password encryption details
 - **[1Password Setup](docs/1PASSWORD-SETUP.md)** - Secure password management
+- **[Bitwarden Setup](docs/BITWARDEN-SETUP.md)** - Bitwarden and Vaultwarden integration
 - **[Password Management](docs/PASSWORD-MANAGEMENT.md)** - Security best practices
 
 ## 🛠️ Development
 
 ### Prerequisites
 
-- Go 1.23 or later
+- Go 1.24 or later
 - For Linux: `gcc`, `libgl1-mesa-dev`, `xorg-dev`
 - For GUI builds: Fyne dependencies
 
@@ -224,7 +234,7 @@ mremotego/
 │   ├── crypto/            # Encryption/decryption
 │   ├── gui/               # Fyne GUI components
 │   ├── launcher/          # Protocol launchers (SSH, RDP, etc.)
-│   └── secrets/           # 1Password integration
+│   └── secrets/           # Password manager providers (1Password, Bitwarden)
 ├── pkg/
 │   └── models/            # Data models
 └── docs/                  # Documentation
@@ -299,7 +309,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### 📋 Planned Features
 
 #### Password Managers
-- [ ] Bitwarden CLI integration (`bw://` references)
+- [x] Bitwarden CLI integration (`bw://` references)
 - [ ] LastPass CLI integration (`lpass://` references)
 - [ ] HashiCorp Vault integration
 - [ ] Pass (password-store) integration for Linux
