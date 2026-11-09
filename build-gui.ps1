@@ -7,13 +7,36 @@ if (!(Test-Path -Path "bin")) {
     New-Item -ItemType Directory -Path "bin" | Out-Null
 }
 
-# Build the application
+# Embed Windows icon into the executable so it shows when pinned to the taskbar.
+# go-winres generates rsrc_windows_*.syso files that go build picks up automatically
+# when building a package (not individual files).
+if ($IsWindows -or $env:OS -match "Windows") {
+    if (Get-Command go-winres -ErrorAction SilentlyContinue) {
+        Write-Host "Embedding icon..." -ForegroundColor Cyan
+        Push-Location cmd/mremotego-gui
+        go-winres simply --icon Icon.png --arch amd64 2>&1 | Out-Null
+        Pop-Location
+    } else {
+        Write-Host "go-winres not found — skipping icon embedding (install with: go install github.com/tc-hib/go-winres@latest)" -ForegroundColor Yellow
+    }
+}
+
+# Version embedded into the binary for the About dialog and self-update checks
+# (see cmd/mremotego-gui/main.go). Falls back to "dev" outside a git checkout
+# or when no tag is reachable, which disables update checks.
+$version = (git describe --tags --always --dirty 2>$null) -replace '^v', ''
+if ([string]::IsNullOrWhiteSpace($version)) {
+    $version = "dev"
+}
+Write-Host "Version: $version" -ForegroundColor Cyan
+
+# Build from the package path (not individual files) so the .syso is included.
 # Using -H windowsgui to hide console window on Windows
 if ($IsWindows -or $env:OS -match "Windows") {
-    go build -ldflags "-H windowsgui" -o mremotego.exe cmd/mremotego-gui/main.go cmd/mremotego-gui/theme.go
+    go build -ldflags "-H windowsgui -X main.version=$version" -o mremotego.exe ./cmd/mremotego-gui/
     $outputFile = "mremotego.exe"
 } else {
-    go build -o mremotego cmd/mremotego-gui/main.go cmd/mremotego-gui/theme.go
+    go build -ldflags "-X main.version=$version" -o mremotego ./cmd/mremotego-gui/
     $outputFile = "mremotego"
 }
 

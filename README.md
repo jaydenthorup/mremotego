@@ -22,7 +22,7 @@
 - ⚡ **Fast** - Native GUI with instant connections
 - 🚀 **Multiple Protocols** - SSH, RDP, VNC, HTTP/HTTPS, Telnet
 - 📁 **Organized** - Folders and search filtering
-- 🔒 **Auto-Login** - Password injection for SSH connections
+- 🔒 **Auto-Login** - Credentials (including 1Password references) passed to SSH and RDP clients; see [RDP clients per platform](#rdp-clients-per-platform)
 - 💻 **CLI & GUI** - Run without arguments for GUI, with arguments for CLI mode
 
 ## 🚀 Quick Start
@@ -54,6 +54,17 @@ go build -o mremotego ./cmd/mremotego-gui
 
 That's it! 🎉
 
+### RDP clients per platform
+
+| Platform | Client | Auto-login |
+|---|---|---|
+| Windows | `mstsc` | ✅ Credentials go through Windows Credential Manager and are removed once the session is connected |
+| Linux | `xfreerdp` | ✅ |
+| macOS | `sdl-freerdp` (`brew install freerdp`) | ✅ All arguments, passwords included, go through stdin, so nothing shows up in `ps` |
+| macOS | Windows App / Microsoft Remote Desktop (used when FreeRDP is not installed) | ⚠️ The password is put on the clipboard for 45 seconds; paste it with Cmd+V when asked |
+
+On macOS, MremoteGO picks `sdl-freerdp` automatically when it is installed. Connections whose RD Gateway uses smartcard authentication always go to Windows App. Set `MREMOTEGO_MAC_RDP_CLIENT=freerdp` or `MREMOTEGO_MAC_RDP_CLIENT=windowsapp` to force one client.
+
 ## 📖 Usage
 
 ### GUI Mode
@@ -74,9 +85,9 @@ Simply run the executable without arguments:
 
 **Connecting:**
 
-- **Double-click** a connection in the tree
-- **Right-click** → **Connect**
-- Select and press **Enter**
+- **Double-click** a connection in the tree (shows details and starts connecting)
+- Select a connection, then click the **🚀 Connect** button in the details panel
+- Select a connection, then click the **▶** toolbar button
 
 **Searching:**
 
@@ -285,12 +296,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] Core connection management (SSH, RDP, VNC, HTTP, Telnet)
 - [x] GUI with tree view and search
 - [x] 1Password integration with special character support
+- [x] 1Password batched credential resolution (single prompt per vault+item)
 - [x] AES-256-GCM password encryption
 - [x] Cross-platform builds (Windows, Linux, macOS ARM64)
 - [x] CLI mode for automation
 - [x] Nested folder support with unlimited depth
 - [x] Import from mRemoteNG XML
 - [x] GitHub Actions CI/CD with automated releases
+- [x] Double-click to connect with progress indicator
+- [x] Windows taskbar icon embedded in executable
+- [x] macOS RDP auto-login via sdl-freerdp, with a Windows App fallback
 
 ### 🚧 In Progress
 - [ ] Improved settings panel with more options
@@ -338,7 +353,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ ] Connection macros/automation
 
 #### Platform-Specific
-- [ ] Windows: Hide console window on launch
 - [ ] Linux: System tray integration
 - [ ] macOS: Menu bar app mode
 

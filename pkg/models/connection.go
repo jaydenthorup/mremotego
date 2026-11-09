@@ -35,10 +35,33 @@ type Connection struct {
 	Children    []*Connection `yaml:"children,omitempty"`
 
 	// Advanced options
-	UseCredSSP bool   `yaml:"use_credssp,omitempty"`
-	ColorDepth int    `yaml:"color_depth,omitempty"` // For RDP
-	Resolution string `yaml:"resolution,omitempty"`  // For RDP
-	ExtraArgs  string `yaml:"extra_args,omitempty"`  // Additional protocol-specific args
+	UseCredSSP             bool   `yaml:"use_credssp,omitempty"`
+	RDPAuthenticationLevel string `yaml:"rdp_authentication_level,omitempty"` // "none", "prompt", "required"
+	ColorDepth             int    `yaml:"color_depth,omitempty"`              // For RDP
+	Resolution             string `yaml:"resolution,omitempty"`               // For RDP
+	ExtraArgs              string `yaml:"extra_args,omitempty"`               // Additional protocol-specific args
+
+	// Local drive redirection (RDP only): maps local drives into the remote session,
+	// where Windows exposes them both as new volumes under "This PC" and as
+	// subdirectories under \\tsclient. Values:
+	//   ""         disabled
+	//   "*"        all drives present now, plus any connected later
+	//   "dynamic"  only drives connected after the session starts (e.g. USB)
+	//   "local"    all local fixed/removable drives present at launch time,
+	//              excluding network-mapped drives
+	//   otherwise  a comma-separated list of drive letters, e.g. "C,D"
+	RDPRedirectDrives string `yaml:"rdp_redirect_drives,omitempty"`
+
+	// RD Gateway options (RDP only)
+	UseGateway                bool   `yaml:"use_gateway,omitempty"`
+	GatewayUsageMethod        string `yaml:"gateway_usage_method,omitempty"` // "never", "always", "detect"
+	GatewayHostname           string `yaml:"gateway_hostname,omitempty"`
+	GatewayCredentials        string `yaml:"gateway_credentials,omitempty"` // "same", "different", "smartcard"
+	GatewayUsername           string `yaml:"gateway_username,omitempty"`
+	GatewayPassword           string `yaml:"gateway_password,omitempty"`
+	GatewayDomain             string `yaml:"gateway_domain,omitempty"`
+	GatewayProfileUsageMethod string `yaml:"gateway_profile_usage_method,omitempty"` // "default", "explicit"
+	GatewayBypassIfLocal      bool   `yaml:"gateway_bypass_if_local,omitempty"`
 
 	// Metadata
 	Tags     []string `yaml:"tags,omitempty"`
@@ -118,22 +141,33 @@ func (c *Connection) DeepCopy() *Connection {
 	}
 
 	connCopy := &Connection{
-		Name:        c.Name,
-		Type:        c.Type,
-		Protocol:    c.Protocol,
-		Host:        c.Host,
-		Port:        c.Port,
-		Username:    c.Username,
-		Password:    c.Password,
-		Domain:      c.Domain,
-		Description: c.Description,
-		UseCredSSP:  c.UseCredSSP,
-		ColorDepth:  c.ColorDepth,
-		Resolution:  c.Resolution,
-		ExtraArgs:   c.ExtraArgs,
-		Notes:       c.Notes,
-		Created:     c.Created,
-		Modified:    c.Modified,
+		Name:                      c.Name,
+		Type:                      c.Type,
+		Protocol:                  c.Protocol,
+		Host:                      c.Host,
+		Port:                      c.Port,
+		Username:                  c.Username,
+		Password:                  c.Password,
+		Domain:                    c.Domain,
+		Description:               c.Description,
+		UseCredSSP:                c.UseCredSSP,
+		RDPAuthenticationLevel:    c.RDPAuthenticationLevel,
+		ColorDepth:                c.ColorDepth,
+		Resolution:                c.Resolution,
+		ExtraArgs:                 c.ExtraArgs,
+		RDPRedirectDrives:         c.RDPRedirectDrives,
+		UseGateway:                c.UseGateway,
+		GatewayUsageMethod:        c.GatewayUsageMethod,
+		GatewayHostname:           c.GatewayHostname,
+		GatewayCredentials:        c.GatewayCredentials,
+		GatewayUsername:           c.GatewayUsername,
+		GatewayPassword:           c.GatewayPassword,
+		GatewayDomain:             c.GatewayDomain,
+		GatewayProfileUsageMethod: c.GatewayProfileUsageMethod,
+		GatewayBypassIfLocal:      c.GatewayBypassIfLocal,
+		Notes:                     c.Notes,
+		Created:                   c.Created,
+		Modified:                  c.Modified,
 	}
 
 	// Deep copy tags

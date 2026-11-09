@@ -2,12 +2,15 @@ package launcher
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/jaydenthorup/mremotego/internal/secrets"
 	"github.com/jaydenthorup/mremotego/pkg/models"
@@ -16,12 +19,33 @@ import (
 // Launcher handles launching connections
 type Launcher struct {
 	onePasswordProvider *secrets.OnePasswordProvider
+	mu       sync.Mutex
+	cleanups map[uint64]func()
+	nextID   uint64
+
+	// Notify, if set, receives short user-facing status messages from a launch
+	// (for example that a password was put on the clipboard). It may be called
+	// from any goroutine. When nil, messages are printed to stdout.
+	Notify func(message string)
+}
+
+// macClipboardClearDelay is how long an RDP password stays on the macOS
+// clipboard before it is removed again.
+const macClipboardClearDelay = 45 * time.Second
+
+func (l *Launcher) notify(message string) {
+	if l.Notify != nil {
+		l.Notify(message)
+		return
+	}
+	fmt.Println(message)
 }
 
 // NewLauncher creates a new launcher
 func NewLauncher() *Launcher {
 	return &Launcher{
 		onePasswordProvider: secrets.NewOnePasswordProvider(),
+		cleanups:            make(map[uint64]func()),
 	}
 }
 
@@ -30,29 +54,98 @@ func (l *Launcher) GetOnePasswordProvider() *secrets.OnePasswordProvider {
 	return l.onePasswordProvider
 }
 
+// registerCleanup records fn to be called when the session ends or when Cleanup is called
+// on app exit. Returns an unregister function that removes the entry once the session
+// ends naturally (so Cleanup skips already-finished sessions).
+func (l *Launcher) registerCleanup(fn func()) (unregister func()) {
+	l.mu.Lock()
+	id := l.nextID
+	l.nextID++
+	l.cleanups[id] = fn
+	l.mu.Unlock()
+
+	return func() {
+		l.mu.Lock()
+		delete(l.cleanups, id)
+		l.mu.Unlock()
+	}
+}
+
+// Cleanup runs all pending session cleanups. Call this when the application is closing
+// to ensure credentials and temp files are removed even if sessions are still open.
+func (l *Launcher) Cleanup() {
+	l.mu.Lock()
+	fns := make([]func(), 0, len(l.cleanups))
+	for _, fn := range l.cleanups {
+		fns = append(fns, fn)
+	}
+	l.cleanups = make(map[uint64]func())
+	l.mu.Unlock()
+
+	for _, fn := range fns {
+		fn()
+	}
+}
+
+// CleanupOnStartup removes leftovers from a previous run that may have been
+// skipped if the process crashed: stale .rdp temp files and any Credential
+// Manager entries tagged with the mremotego comment.
+func CleanupOnStartup() {
+	cleanupStaleTempFiles()
+	cleanupOrphanedCredentials() // no-op on non-Windows
+}
+
+func cleanupStaleTempFiles() {
+	dir := filepath.Join(os.TempDir(), "mremotego")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return // directory doesn't exist yet — nothing to clean
+	}
+	for _, e := range entries {
+		if !e.IsDir() && filepath.Ext(e.Name()) == ".rdp" {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+}
+
 // Launch launches a connection based on its protocol
 func (l *Launcher) Launch(conn *models.Connection) error {
 	if conn.IsFolder() {
 		return fmt.Errorf("cannot launch a folder")
 	}
 
-	// Resolve 1Password reference if needed (make a copy to avoid modifying the original)
+	// Resolve 1Password references in a single batched call (grouped by vault+item)
+	// so that credentials from the same 1Password item require only one biometric prompt.
 	resolvedConn := *conn
-	if l.onePasswordProvider.IsReference(conn.Password) {
-		resolved, err := l.onePasswordProvider.ResolveSecret(conn.Password)
-		if err != nil {
-			// For RDP, we can continue without a password (will prompt)
-			// For other protocols that require a password, return the error
-			if conn.Protocol != models.ProtocolRDP {
-				return fmt.Errorf("failed to resolve password from 1Password: %w", err)
-			}
-			// RDP: Clear the password so it doesn't try to use the op:// reference
-			fmt.Printf("Warning: Failed to resolve password from 1Password: %v (RDP will prompt for credentials)\n", err)
-			resolvedConn.Password = ""
-		} else {
-			resolvedConn.Password = resolved
+	opRefs := make([]string, 0, 4)
+	for _, v := range []string{conn.Username, conn.Password, conn.GatewayUsername, conn.GatewayPassword} {
+		if l.onePasswordProvider.IsReference(v) {
+			opRefs = append(opRefs, v)
 		}
 	}
+
+	var opValues map[string]string
+	if len(opRefs) > 0 {
+		var err error
+		opValues, err = l.onePasswordProvider.ResolveMultiple(opRefs)
+		if err != nil {
+			return fmt.Errorf("failed to resolve 1Password references: %w", err)
+		}
+	}
+
+	apply := func(v string) string {
+		if l.onePasswordProvider.IsReference(v) {
+			if resolved, ok := opValues[v]; ok {
+				return resolved
+			}
+			return ""
+		}
+		return v
+	}
+	resolvedConn.Username = apply(conn.Username)
+	resolvedConn.Password = apply(conn.Password)
+	resolvedConn.GatewayUsername = apply(conn.GatewayUsername)
+	resolvedConn.GatewayPassword = apply(conn.GatewayPassword)
 
 	switch resolvedConn.Protocol {
 	case models.ProtocolSSH:
@@ -303,44 +396,91 @@ func (l *Launcher) launchRDP(conn *models.Connection) error {
 
 	switch runtime.GOOS {
 	case "windows":
-		// Store credentials in Windows Credential Manager if password is provided
+		// Store credentials and track every target we write so we can remove
+		// them from Credential Manager once mstsc exits.
+		var credTargets []string
+
 		if conn.Username != "" && conn.Password != "" {
 			if err := l.storeWindowsCredential(conn); err != nil {
-				// Continue anyway - mstsc will prompt if credentials aren't stored
 				fmt.Printf("Warning: Failed to store credentials: %v\n", err)
+			} else {
+				credTargets = append(credTargets, "TERMSRV/"+target)
+			}
+		}
+		if conn.UseGateway && conn.GatewayHostname != "" {
+			if conn.GatewayCredentials == "different" && conn.GatewayPassword != "" {
+				if err := l.storeGatewayCredential(conn); err != nil {
+					fmt.Printf("Warning: Failed to store gateway credentials: %v\n", err)
+				} else {
+					credTargets = append(credTargets, "TERMSRV/"+conn.GatewayHostname)
+				}
+			} else if (conn.GatewayCredentials == "same" || conn.GatewayCredentials == "") && conn.Username != "" && conn.Password != "" {
+				gwUsername := conn.Username
+				if conn.Domain != "" {
+					gwUsername = fmt.Sprintf("%s\\%s", conn.Domain, conn.Username)
+				}
+				// mstsc looks up RD Gateway credentials by bare hostname (no TERMSRV/ prefix),
+				// unlike RDP host credentials which use TERMSRV/<host>.
+				if err := writeWindowsCredential(conn.GatewayHostname, gwUsername, conn.Password); err != nil {
+					fmt.Printf("Warning: Failed to store gateway credentials: %v\n", err)
+				} else {
+					credTargets = append(credTargets, conn.GatewayHostname)
+				}
 			}
 		}
 
-		// Create a temporary .rdp file with connection settings
 		rdpFile, err := l.createRDPFile(conn, target)
 		if err != nil {
 			return fmt.Errorf("failed to create RDP file: %w", err)
 		}
 
-		// Launch mstsc with the RDP file
-		cmd = exec.Command("mstsc", rdpFile)
-		// Don't hide mstsc - it's a GUI application we want to see
+		mstsc := exec.Command("mstsc", rdpFile)
+		mstsc.Stdin = nil
+		mstsc.Stdout = nil
+		mstsc.Stderr = nil
+		if err := mstsc.Start(); err != nil {
+			for _, t := range credTargets {
+				_ = deleteWindowsCredential(t)
+			}
+			_ = os.Remove(rdpFile)
+			return fmt.Errorf("failed to start mstsc: %w", err)
+		}
+
+		cleanup := func() {
+			for _, t := range credTargets {
+				_ = deleteWindowsCredential(t)
+			}
+			_ = os.Remove(rdpFile)
+		}
+		unregister := l.registerCleanup(cleanup)
+
+		go func() {
+			exited := make(chan struct{})
+			go func() {
+				_ = mstsc.Wait()
+				close(exited)
+			}()
+			// Wait until the mstsc window title starts with the hostname, meaning
+			// authentication is complete and credentials are no longer needed.
+			// Falls back to process exit or 60s timeout if connection never establishes.
+			waitForMstscConnected(mstsc.Process.Pid, conn.Host, 60*time.Second, exited)
+			unregister()
+			cleanup()
+		}()
+
+		return nil
 
 	case "darwin":
-		// Use Microsoft Remote Desktop on macOS
-		// Format: rdp://[username@]hostname[:port]
-		rdpURL := "rdp://"
-		if conn.Username != "" {
-			rdpURL += conn.Username
-			if conn.Domain != "" {
-				rdpURL += "@" + conn.Domain
-			}
-			rdpURL += "@"
+		// Prefer sdl-freerdp when installed: it takes the 1Password credentials
+		// directly. Otherwise fall back to Windows App with the clipboard hand-off.
+		bin, err := chooseMacRDPClient(conn)
+		if err != nil {
+			return err
 		}
-		rdpURL += conn.Host
-		if port != 3389 {
-			rdpURL += fmt.Sprintf(":%d", port)
+		if bin != "" {
+			return l.launchSDLFreeRDP(bin, conn, target)
 		}
-
-		// Use 'open' to launch Microsoft Remote Desktop with rdp:// URL
-		cmd = exec.Command("open", rdpURL)
-		// Note: Password cannot be passed via URL for security reasons
-		// Microsoft Remote Desktop will prompt or use saved credentials
+		return l.launchRDPMacWindowsApp(conn, target)
 
 	case "linux":
 		// Use xfreerdp on Linux
@@ -387,6 +527,63 @@ func (l *Launcher) launchRDP(conn *models.Connection) error {
 	cmd.Stderr = nil
 
 	return cmd.Start()
+}
+
+// launchRDPMacWindowsApp hands a temporary .rdp file to whichever app is the
+// default .rdp handler on macOS: Windows App or its predecessor Microsoft
+// Remote Desktop, both register for it, so no app name is hardcoded. An
+// rdp://user@host URL is not a valid URI for that client and is rejected with
+// "The URL is not valid"; the .rdp file also carries port, domain, gateway and
+// drive redirection settings.
+// The password cannot be passed this way (the Mac clients ignore it in .rdp
+// files), so it is put on the clipboard for the user to paste into the
+// client's password prompt, and removed again after a short delay. A separate
+// gateway password ("different" credentials) is not handed off.
+func (l *Launcher) launchRDPMacWindowsApp(conn *models.Connection, target string) error {
+	rdpFile, err := l.createRDPFile(conn, target)
+	if err != nil {
+		return fmt.Errorf("failed to create RDP file: %w", err)
+	}
+
+	var clearClipboard func()
+	if conn.Password != "" {
+		clearClipboard, err = copySecretToClipboard(conn.Password)
+		if err != nil {
+			l.notify(fmt.Sprintf("Could not copy the password to the clipboard: %v", err))
+			clearClipboard = nil
+		}
+	}
+
+	open := exec.Command("open", rdpFile)
+	if err := open.Run(); err != nil {
+		_ = os.Remove(rdpFile)
+		if clearClipboard != nil {
+			clearClipboard()
+		}
+		return fmt.Errorf("failed to open RDP file (is Windows App or Microsoft Remote Desktop installed?): %w", err)
+	}
+
+	if clearClipboard != nil {
+		unregisterClip := l.registerCleanup(clearClipboard)
+		time.AfterFunc(macClipboardClearDelay, func() {
+			unregisterClip()
+			clearClipboard()
+			l.notify("Password removed from the clipboard")
+		})
+		l.notify(fmt.Sprintf("Password for %s copied to the clipboard; paste it (Cmd+V) when asked. It is removed in %d seconds",
+			conn.Name, int(macClipboardClearDelay.Seconds())))
+	}
+
+	// 'open' returns once the file is handed off, but the client reads it
+	// asynchronously, so remove it after a grace period (or on app exit).
+	cleanup := func() { _ = os.Remove(rdpFile) }
+	unregister := l.registerCleanup(cleanup)
+	time.AfterFunc(60*time.Second, func() {
+		unregister()
+		cleanup()
+	})
+
+	return nil
 }
 
 // launchVNC launches a VNC connection
@@ -474,11 +671,10 @@ func (l *Launcher) createRDPFile(conn *models.Connection, target string) (string
 		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}
 
-	// Sanitize connection name for filename (remove invalid characters)
+	// Unique suffix prevents collisions when the same connection is opened
+	// multiple times concurrently.
 	safeName := sanitizeFilename(conn.Name)
-
-	// Create RDP file with .rdp extension
-	rdpPath := filepath.Join(tempDir, safeName+".rdp")
+	rdpPath := filepath.Join(tempDir, fmt.Sprintf("%s-%08x.rdp", safeName, rand.Uint32()))
 
 	// Build RDP file content (UTF-8 encoding)
 	rdpContent := fmt.Sprintf("full address:s:%s\r\n", target)
@@ -524,21 +720,87 @@ func (l *Launcher) createRDPFile(conn *models.Connection, target string) (string
 	rdpContent += "redirectclipboard:i:1\r\n"
 	rdpContent += "redirectposdevices:i:0\r\n"
 	rdpContent += "autoreconnection enabled:i:1\r\n"
-	rdpContent += "authentication level:i:2\r\n"
+
+	// Local drive redirection: makes local drives available inside the session,
+	// where Windows shows them both as new volumes under "This PC" and as
+	// subdirectories under \\tsclient.
+	if driveSpec := rdpDriveRedirectValue(conn.RDPRedirectDrives); driveSpec != "" {
+		rdpContent += fmt.Sprintf("drivestoredirect:s:%s\r\n", driveSpec)
+	}
+
+	// Authentication level: 0 = always connect, 1 = don't connect on failure, 2 = warn
+	authLevel := 0
+	switch conn.RDPAuthenticationLevel {
+	case "fail":
+		authLevel = 1
+	case "warn":
+		authLevel = 2
+	}
+	rdpContent += fmt.Sprintf("authentication level:i:%d\r\n", authLevel)
+
 	rdpContent += "prompt for credentials:i:0\r\n"
 	rdpContent += "negotiate security layer:i:1\r\n"
+
+	// Use CredSSP
+	credSSP := 1
+	if !conn.UseCredSSP {
+		credSSP = 0
+	}
+	rdpContent += fmt.Sprintf("use cred ssp:i:%d\r\n", credSSP)
+
 	rdpContent += "remoteapplicationmode:i:0\r\n"
 	rdpContent += "alternate shell:s:\r\n"
 	rdpContent += "shell working directory:s:\r\n"
-	rdpContent += "gatewayhostname:s:\r\n"
-	rdpContent += "gatewayusagemethod:i:4\r\n"
-	rdpContent += "gatewaycredentialssource:i:4\r\n"
-	rdpContent += "gatewayprofileusagemethod:i:0\r\n"
+	if conn.UseGateway && conn.GatewayHostname != "" {
+		rdpContent += fmt.Sprintf("gatewayhostname:s:%s\r\n", conn.GatewayHostname)
+
+		usageMethod := 1 // default: always
+		switch conn.GatewayUsageMethod {
+		case "detect":
+			usageMethod = 2
+		case "never":
+			usageMethod = 4
+		}
+		rdpContent += fmt.Sprintf("gatewayusagemethod:i:%d\r\n", usageMethod)
+
+		credSource := 0 // default: NTLM password, uses Credential Manager silently
+		switch conn.GatewayCredentials {
+		case "smartcard":
+			credSource = 1
+		}
+		rdpContent += fmt.Sprintf("gatewaycredentialssource:i:%d\r\n", credSource)
+
+		if conn.GatewayCredentials == "different" && conn.GatewayUsername != "" {
+			rdpContent += fmt.Sprintf("gatewayusername:s:%s\r\n", conn.GatewayUsername)
+			if conn.GatewayDomain != "" {
+				rdpContent += fmt.Sprintf("gatewaydomain:s:%s\r\n", conn.GatewayDomain)
+			}
+		}
+	} else {
+		rdpContent += "gatewayhostname:s:\r\n"
+		rdpContent += "gatewayusagemethod:i:4\r\n"
+		rdpContent += "gatewaycredentialssource:i:4\r\n"
+	}
+
+	// Gateway profile usage method: 0 = use default profile, 1 = use explicit settings (default)
+	profileMethod := 1
+	if conn.GatewayProfileUsageMethod == "default" {
+		profileMethod = 0
+	}
+	rdpContent += fmt.Sprintf("gatewayprofileusagemethod:i:%d\r\n", profileMethod)
+
 	rdpContent += "promptcredentialonce:i:0\r\n"
 	rdpContent += "gatewaybrokeringtype:i:0\r\n"
-	rdpContent += "use redirection server name:i:0\r\n"
+	rdpContent += "use redirection server name:i:1\r\n"
 	rdpContent += "rdgiskdcproxy:i:0\r\n"
 	rdpContent += "kdcproxyname:s:\r\n"
+
+	// Bypass gateway for local addresses
+	bypassLocal := 0
+	if conn.GatewayBypassIfLocal {
+		bypassLocal = 1
+	}
+	rdpContent += fmt.Sprintf("gatewayisbypassiflocal:i:%d\r\n", bypassLocal)
 
 	// Resolution settings
 	if conn.Resolution != "" {
@@ -560,6 +822,49 @@ func (l *Launcher) createRDPFile(conn *models.Connection, target string) (string
 	}
 
 	return rdpPath, nil
+}
+
+// rdpDriveRedirectValue converts a Connection.RDPRedirectDrives spec into the
+// value expected by the .rdp file's "drivestoredirect" setting:
+//   "*"       all drives, including ones connected later — passed through unchanged
+//   "dynamic" only drives connected after the session starts — becomes "DynamicDrives"
+//   "local"   local fixed/removable drives present now, excluding network drives —
+//             resolved via localFixedDriveLetters() (Windows-only; empty elsewhere)
+//   otherwise a comma-separated list of drive letters like "C,D" becomes "C:;D:"
+// Returns "" when redirection is disabled or the spec has no usable drive letters.
+func rdpDriveRedirectValue(spec string) string {
+	spec = strings.TrimSpace(spec)
+	switch spec {
+	case "", "*":
+		return spec
+	case "dynamic":
+		return "DynamicDrives"
+	case "local":
+		drives := localFixedDriveLetters()
+		if len(drives) == 0 {
+			return ""
+		}
+		letters := make([]string, len(drives))
+		for i, d := range drives {
+			letters[i] = d + ":"
+		}
+		return strings.Join(letters, ";")
+	}
+
+	parts := strings.Split(spec, ",")
+	drives := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		p = strings.TrimSuffix(p, ":")
+		if p == "" {
+			continue
+		}
+		drives = append(drives, strings.ToUpper(p)+":")
+	}
+	if len(drives) == 0 {
+		return ""
+	}
+	return strings.Join(drives, ";")
 }
 
 // sanitizeFilename removes or replaces invalid characters from a filename
@@ -601,17 +906,21 @@ func (l *Launcher) storeWindowsCredential(conn *models.Connection) error {
 		username = fmt.Sprintf("%s\\%s", conn.Domain, conn.Username)
 	}
 
-	// Use cmdkey to store the credential
-	// cmdkey /generic:TERMSRV/hostname /user:username /pass:password
-	cmd := exec.Command("cmdkey", "/generic:TERMSRV/"+target, "/user:"+username, "/pass:"+conn.Password)
-	hideConsoleWindow(cmd)
+	return writeWindowsCredential("TERMSRV/"+target, username, conn.Password)
+}
 
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("cmdkey failed: %w, output: %s", err, string(output))
+// storeGatewayCredential stores RD Gateway credentials in Windows Credential Manager
+func (l *Launcher) storeGatewayCredential(conn *models.Connection) error {
+	if runtime.GOOS != "windows" {
+		return nil
 	}
 
-	return nil
+	username := conn.GatewayUsername
+	if conn.GatewayDomain != "" {
+		username = fmt.Sprintf("%s\\%s", conn.GatewayDomain, conn.GatewayUsername)
+	}
+
+	return writeWindowsCredential("TERMSRV/"+conn.GatewayHostname, username, conn.GatewayPassword)
 }
 
 // RemoveWindowsCredential removes RDP credentials from Windows Credential Manager
@@ -630,20 +939,7 @@ func (l *Launcher) RemoveWindowsCredential(conn *models.Connection) error {
 		target = fmt.Sprintf("%s:%d", conn.Host, port)
 	}
 
-	// Use cmdkey to delete the credential
-	// cmdkey /delete:TERMSRV/hostname
-	cmd := exec.Command("cmdkey", "/delete:TERMSRV/"+target)
-	hideConsoleWindow(cmd)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Don't return error if credential doesn't exist
-		if !strings.Contains(string(output), "not found") {
-			return fmt.Errorf("cmdkey delete failed: %w, output: %s", err, string(output))
-		}
-	}
-
-	return nil
+	return deleteWindowsCredential("TERMSRV/" + target)
 }
 
 // CleanupAllCredentials removes all MremoteGO-stored credentials from Windows Credential Manager

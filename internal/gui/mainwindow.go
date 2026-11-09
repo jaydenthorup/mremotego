@@ -21,6 +21,7 @@ type MainWindow struct {
 	window         fyne.Window
 	manager        *config.Manager
 	launcher       *launcher.Launcher
+	version        string
 	tree           *widget.Tree
 	detailsCard    *widget.Card
 	selectedConn   *models.Connection
@@ -28,24 +29,55 @@ type MainWindow struct {
 	searchEntry    *widget.Entry
 	allConnections []*models.Connection
 	filteredIDs    []string
-	statusLabel    *widget.Label
-	activeSessions *widget.List
-	sessionList    []*models.Connection
+	statusLabel            *widget.Label
+	gitStatusLabel         *widget.Label
+	activeSessions         *widget.List
+	sessionList            []*models.Connection
+	detailsConnectBtn      *widget.Button
+	detailsStatusContainer *fyne.Container
 }
 
-// NewMainWindow creates a new main window
-func NewMainWindow(app fyne.App, manager *config.Manager) *MainWindow {
+// NewMainWindow creates a new main window. version is the running build's
+// version string (e.g. "1.4.0", or "dev" for local builds), used for the
+// About dialog and self-update checks.
+func NewMainWindow(app fyne.App, manager *config.Manager, version string) *MainWindow {
 	w := &MainWindow{
 		app:            app,
 		window:         app.NewWindow("MremoteGO - Remote Connection Manager"),
 		manager:        manager,
 		launcher:       launcher.NewLauncher(),
+		version:        version,
 		connectionData: make(map[string]*models.Connection),
 	}
 
 	w.setupUI()
 	w.setupKeyboardShortcuts()
+	w.launcher.Notify = func(message string) {
+		fyne.Do(func() { w.statusLabel.SetText(message) })
+	}
 	return w
+}
+
+// Window returns the underlying Fyne window.
+func (w *MainWindow) Window() fyne.Window {
+	return w.window
+}
+
+// ShowInfo displays a non-blocking information dialog on the main window.
+func (w *MainWindow) ShowInfo(title, message string) {
+	dialog.ShowInformation(title, message, w.window)
+}
+
+// SetGitStatus updates the git sync indicator in the status bar.
+func (w *MainWindow) SetGitStatus(status config.GitStatus) {
+	switch status {
+	case config.GitStatusUpToDate:
+		w.gitStatusLabel.SetText("✓ Config up to date")
+	case config.GitStatusBehind:
+		w.gitStatusLabel.SetText("↓ Config behind")
+	default:
+		w.gitStatusLabel.SetText("")
+	}
 }
 
 // setupKeyboardShortcuts sets up keyboard shortcuts
@@ -92,9 +124,8 @@ func (w *MainWindow) setupUI() {
 
 	// Create status bar
 	w.statusLabel = widget.NewLabel("Ready")
-	statusBar := container.NewHBox(
-		w.statusLabel,
-	)
+	w.gitStatusLabel = widget.NewLabel("")
+	statusBar := container.NewBorder(nil, nil, nil, w.gitStatusLabel, w.statusLabel)
 
 	// Main content with toolbar and status bar
 	content := container.NewBorder(
@@ -134,6 +165,7 @@ func (w *MainWindow) setupMenuBar() {
 	)
 
 	helpMenu := fyne.NewMenu("Help",
+		fyne.NewMenuItem("Check for Updates...", func() { go w.CheckForUpdates(true) }),
 		fyne.NewMenuItem("About", func() { w.showAbout() }),
 	)
 
@@ -236,7 +268,7 @@ func (w *MainWindow) createConnectionTree() *widget.Tree {
 		},
 		// Create
 		func(branch bool) fyne.CanvasObject {
-			return widget.NewLabel("Template")
+			return newNodeLabel()
 		},
 		// Update
 		func(uid string, branch bool, obj fyne.CanvasObject) {
@@ -244,10 +276,17 @@ func (w *MainWindow) createConnectionTree() *widget.Tree {
 			if !exists {
 				return
 			}
-
-			label := obj.(*widget.Label)
-			icon := w.getConnectionIcon(conn)
-			label.SetText(icon + " " + conn.Name)
+			n := obj.(*nodeLabel)
+			n.SetText(w.getConnectionIcon(conn) + " " + conn.Name)
+			n.onTap = func() {
+				w.tree.Select(uid)
+				w.window.Canvas().Focus(w.tree)
+			}
+			if !conn.IsFolder() {
+				n.onDoubleTap = func() { w.connectWithProgress(conn) }
+			} else {
+				n.onDoubleTap = nil
+			}
 		},
 	)
 
@@ -311,6 +350,23 @@ func (w *MainWindow) createDetailsPanel() *fyne.Container {
 	)
 }
 
+// titleTheme enlarges text to match a card title
+type titleTheme struct{ fyne.Theme }
+
+func (t titleTheme) Size(name fyne.ThemeSizeName) float32 {
+	if name == theme.SizeNameText {
+		return t.Theme.Size(theme.SizeNameSubHeadingText)
+	}
+	return t.Theme.Size(name)
+}
+
+// selectableLabel returns a label whose text can be selected and copied
+func selectableLabel(text string) *widget.Label {
+	l := widget.NewLabel(text)
+	l.Selectable = true
+	return l
+}
+
 // updateDetailsPanel updates the details panel with connection info
 func (w *MainWindow) updateDetailsPanel(conn *models.Connection) {
 	if conn.IsFolder() {
@@ -322,11 +378,18 @@ func (w *MainWindow) updateDetailsPanel(conn *models.Connection) {
 	}
 
 	icon := w.getConnectionIcon(conn)
-	w.detailsCard.SetTitle(icon + " " + conn.Name)
-	w.detailsCard.SetSubTitle(string(conn.Protocol))
+	// Card titles are not selectable, so show the name as a selectable label instead
+	w.detailsCard.SetTitle("")
+	w.detailsCard.SetSubTitle("")
+
+	nameLabel := selectableLabel(icon + " " + conn.Name)
+	nameLabel.TextStyle = fyne.TextStyle{Bold: true}
+	protocolLabel := widget.NewLabel(string(conn.Protocol))
 
 	details := container.NewVBox(
-		widget.NewLabel("Host: "+conn.Host),
+		container.NewThemeOverride(nameLabel, titleTheme{theme.Current()}),
+		protocolLabel,
+		selectableLabel("Host: "+conn.Host),
 		widget.NewLabel(fmt.Sprintf("Port: %d", conn.Port)),
 	)
 
@@ -358,10 +421,12 @@ func (w *MainWindow) updateDetailsPanel(conn *models.Connection) {
 
 	// Add action buttons
 	details.Add(widget.NewLabel(""))
-	connectBtn := widget.NewButton("🚀 Connect", func() {
-		w.connectToConnection(conn)
+
+	w.detailsStatusContainer = container.NewVBox()
+	w.detailsConnectBtn = widget.NewButton("🚀 Connect", func() {
+		w.connectWithProgress(conn)
 	})
-	connectBtn.Importance = widget.HighImportance
+	w.detailsConnectBtn.Importance = widget.HighImportance
 
 	editBtn := widget.NewButton("✏️ Edit", func() {
 		w.showEditConnectionDialog(conn)
@@ -372,8 +437,9 @@ func (w *MainWindow) updateDetailsPanel(conn *models.Connection) {
 	})
 	deleteBtn.Importance = widget.DangerImportance
 
-	actionButtons := container.NewGridWithColumns(3, connectBtn, editBtn, deleteBtn)
+	actionButtons := container.NewGridWithColumns(3, w.detailsConnectBtn, editBtn, deleteBtn)
 	details.Add(actionButtons)
+	details.Add(w.detailsStatusContainer)
 
 	w.detailsCard.SetContent(details)
 }
@@ -441,12 +507,40 @@ func (w *MainWindow) connectToSelected() {
 }
 
 func (w *MainWindow) connectToConnection(conn *models.Connection) {
-	if err := w.launcher.Launch(conn); err != nil {
-		dialog.ShowError(fmt.Errorf("Failed to launch connection: %w", err), w.window)
-		return
-	}
+	go func() {
+		err := w.launcher.Launch(conn)
+		if err != nil {
+			fyne.Do(func() {
+				dialog.ShowError(fmt.Errorf("Failed to launch connection: %w", err), w.window)
+			})
+		}
+	}()
+}
 
-	dialog.ShowInformation("Connected", fmt.Sprintf("Launched connection to %s", conn.Name), w.window)
+func (w *MainWindow) connectWithProgress(conn *models.Connection) {
+	if w.detailsConnectBtn != nil {
+		w.detailsConnectBtn.Disable()
+	}
+	if w.detailsStatusContainer != nil {
+		w.detailsStatusContainer.RemoveAll()
+		w.detailsStatusContainer.Add(widget.NewProgressBarInfinite())
+		w.detailsStatusContainer.Refresh()
+	}
+	go func() {
+		err := w.launcher.Launch(conn)
+		fyne.Do(func() {
+			if w.detailsStatusContainer != nil {
+				w.detailsStatusContainer.RemoveAll()
+				w.detailsStatusContainer.Refresh()
+			}
+			if w.detailsConnectBtn != nil {
+				w.detailsConnectBtn.Enable()
+			}
+			if err != nil {
+				dialog.ShowError(fmt.Errorf("Failed to launch connection: %w", err), w.window)
+			}
+		})
+	}()
 }
 
 func (w *MainWindow) editSelected() {
@@ -546,15 +640,27 @@ func (w *MainWindow) exportConfig() {
 }
 
 func (w *MainWindow) showAbout() {
+	version := w.version
+	if version == "" {
+		version = "dev"
+	}
 	dialog.ShowInformation("About MremoteGO",
-		"MremoteGO v1.0\n\nA Git-compatible remote connection manager\n\n"+
-			"Built with Go and Fyne\n\n"+
-			"© 2026 Your Name",
+		fmt.Sprintf("MremoteGO %s\n\nA Git-compatible remote connection manager\n\n"+
+			"Built with Go and Fyne", version),
 		w.window)
+}
+
+// Quit performs the same cleanup as closing the window, then exits the app.
+// Exported so the self-update flow can call it after relaunching into a new
+// version.
+func (w *MainWindow) Quit() {
+	w.launcher.Cleanup()
+	w.app.Quit()
 }
 
 // Show displays the main window
 func (w *MainWindow) Show() {
+	w.window.SetCloseIntercept(w.Quit)
 	w.window.Show()
 
 	// Check 1Password CLI authentication status after window is shown
@@ -583,26 +689,73 @@ func (w *MainWindow) check1PasswordAuth() {
 		return
 	}
 
-	// Check if 1Password CLI is authenticated
+	// Only verify that the CLI is present in PATH. Running `op whoami` to
+	// check the live authentication status spawns a visible console window
+	// on Windows for ~2s at startup. Authentication errors surface when a
+	// reference is actually resolved in the launcher.
 	opProvider := w.launcher.GetOnePasswordProvider()
-	if opProvider.IsEnabled() && !opProvider.IsAuthenticated() {
-		// Show a helpful dialog
-		content := widget.NewLabel(opProvider.GetAuthenticationInstructions())
+	if !opProvider.IsEnabled() {
+		content := widget.NewLabel("Your connections use 1Password references (op://...) but the 1Password CLI (op) was not found in PATH. Install it and ensure it is on your PATH.")
 		content.Wrapping = fyne.TextWrapWord
 
 		scrollContainer := container.NewVScroll(content)
-		scrollContainer.SetMinSize(fyne.NewSize(600, 400))
+		scrollContainer.SetMinSize(fyne.NewSize(600, 200))
 
 		dialog.ShowCustom(
-			"1Password CLI Not Authenticated",
+			"1Password CLI Not Installed",
 			"OK",
 			scrollContainer,
 			w.window,
 		)
 	}
-} // Reload refreshes the window with the loaded config
+}
+
+// Reload refreshes the window with the loaded config
 func (w *MainWindow) Reload() {
 	w.buildConnectionMap()
 	w.tree.Refresh()
 	w.updateStatus()
+}
+
+// nodeLabel is the content widget for each tree node.
+// It must implement both Tappable and DoubleTappable: once a widget implements
+// DoubleTappable, Fyne routes the initial tap to it and never lets it reach
+// the parent treeNode, so we have to drive tree.Select ourselves via onTap.
+type nodeLabel struct {
+	widget.BaseWidget
+	lbl         *widget.Label
+	onTap       func()
+	onDoubleTap func()
+}
+
+func newNodeLabel() *nodeLabel {
+	n := &nodeLabel{lbl: widget.NewLabel("")}
+	n.ExtendBaseWidget(n)
+	return n
+}
+
+func (n *nodeLabel) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(n.lbl)
+}
+
+func (n *nodeLabel) SetText(text string) {
+	n.lbl.SetText(text)
+}
+
+func (n *nodeLabel) Tapped(*fyne.PointEvent) {
+	if n.onTap != nil {
+		n.onTap()
+	}
+}
+
+func (n *nodeLabel) DoubleTapped(*fyne.PointEvent) {
+	// Fyne fires Tapped OR DoubleTapped — never both for the same click sequence.
+	// Run onTap first so the item is selected and the details panel is populated
+	// before the connection starts.
+	if n.onTap != nil {
+		n.onTap()
+	}
+	if n.onDoubleTap != nil {
+		n.onDoubleTap()
+	}
 }

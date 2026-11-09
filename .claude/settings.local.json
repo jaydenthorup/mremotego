@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep *)",
+      "Bash(go vet *)",
+      "Bash(git *)",
+      "Bash(go test *)",
+      "Bash(go env *)",
+      "Bash(grep -n *)",
+      "Bash(Get-Content *)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)"
+    ]
+  }
+}

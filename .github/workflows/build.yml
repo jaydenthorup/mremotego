@@ -2,11 +2,21 @@ name: Build Cross-Platform
 
 on:
   push:
+    branches: [ main ]  # Also keeps main's build cache warm — see below
     tags:
       - 'v*.*.*'  # Only trigger on version tags like v1.0.0
   pull_request:
     branches: [ main ]
   workflow_dispatch:  # Allow manual trigger
+
+# GitHub Actions caches (actions/setup-go's module+build cache here) are only
+# restorable from the exact same ref or the repository's default branch — a
+# newly-pushed release tag has never been built before, so with no build on
+# `main` it always started from a fully cold cache. Confirmed via timing: the
+# Windows build (the slowest by far, due to CGO compiling Fyne's OpenGL
+# bindings) took ~380-400s cold, but only ~35s once main's cache was warm.
+# Building on every push to main keeps that cache hot, so tag-triggered
+# release builds inherit it instead of starting cold every time.
 
 jobs:
   build:
@@ -27,7 +37,11 @@ jobs:
             goos: windows
             goarch: amd64
             name: mremotego-windows-amd64.exe
-          - os: macos-14
+          # macos-14 runners were retired on 2026-11-02 ("configuration not
+          # supported"). Pinned rather than macos-latest so image upgrades are
+          # deliberate; MACOSX_DEPLOYMENT_TARGET in the build step keeps the
+          # binary runnable on older macOS versions than the runner's.
+          - os: macos-26
             goos: darwin
             goarch: arm64
             name: mremotego-darwin-arm64
@@ -39,13 +53,25 @@ jobs:
           #   name: mremotego-darwin-amd64
 
     steps:
+    - name: Exclude build paths from Windows Defender scanning
+      # CGO builds (needed for Fyne's OpenGL bindings) write large numbers of
+      # object files during compilation, and Windows Defender's real-time
+      # scanning of each one is the single biggest reason this job takes far
+      # longer than the Linux/macOS builds of the same code (~7min vs
+      # ~40s-2.5min). Safe here since the runner is an ephemeral, single-use VM.
+      if: matrix.os == 'windows-latest'
+      shell: powershell
+      run: |
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}", "$env:LOCALAPPDATA", "$env:USERPROFILE\go"
+
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7.0.1
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v7.0.0
       with:
-        go-version: '1.23'
+        go-version: '1.24'
+        cache: true
 
     - name: Install Linux dependencies
       if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm'
@@ -53,29 +79,66 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
 
+    - name: Cache go-winres binary
+      # go-winres itself never changes between builds, but "go install ...@latest"
+      # re-resolves and rebuilds it from source on every single run regardless
+      # (~40s wasted). Pinning the version and caching the compiled binary
+      # turns that into a one-time cost.
+      if: matrix.os == 'windows-latest'
+      id: cache-go-winres
+      uses: actions/cache@v6.1.0
+      with:
+        path: ~/go/bin/go-winres.exe
+        key: go-winres-v0.3.3-windows-amd64
+
+    - name: Install go-winres (Windows icon embedding)
+      if: matrix.os == 'windows-latest' && steps.cache-go-winres.outputs.cache-hit != 'true'
+      run: go install github.com/tc-hib/go-winres@v0.3.3
+
+    - name: Generate Windows resources
+      if: matrix.os == 'windows-latest'
+      working-directory: cmd/mremotego-gui
+      run: go-winres simply --icon Icon.png --arch amd64
+
+    - name: Determine version
+      id: version
+      shell: bash
+      run: |
+        # Embedded into the binary for the About dialog and self-update checks
+        # (see cmd/mremotego-gui/main.go). Only tag pushes get a real version —
+        # PR/workflow_dispatch builds stay "dev", which disables update checks.
+        if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+          echo "value=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+        else
+          echo "value=dev" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Build (Windows)
       if: matrix.os == 'windows-latest'
       env:
         CGO_ENABLED: 1
       run: |
-        go build -ldflags "-H windowsgui" -o ${{ matrix.name }} ./cmd/mremotego-gui
+        go build -ldflags "-s -H windowsgui -X main.version=${{ steps.version.outputs.value }}" -o ${{ matrix.name }} ./cmd/mremotego-gui
 
     - name: Build (Linux)
       if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm'
       env:
         CGO_ENABLED: 1
       run: |
-        go build -o ${{ matrix.name }} ./cmd/mremotego-gui
+        go build -ldflags "-s -X main.version=${{ steps.version.outputs.value }}" -o ${{ matrix.name }} ./cmd/mremotego-gui
 
     - name: Build (macOS)
       if: startsWith(matrix.os, 'macos')
       env:
         CGO_ENABLED: 1
+        # Without this, clang targets the runner's own macOS version for the
+        # cgo (Fyne/GLFW) code, and the binary may refuse to start on older Macs.
+        MACOSX_DEPLOYMENT_TARGET: '12.0'
       run: |
-        go build -o ${{ matrix.name }} ./cmd/mremotego-gui
+        go build -ldflags "-X main.version=${{ steps.version.outputs.value }}" -o ${{ matrix.name }} ./cmd/mremotego-gui
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7.0.1
       with:
         name: ${{ matrix.goos }}-${{ matrix.goarch }}
         path: ${{ matrix.name }}
@@ -89,10 +152,10 @@ jobs:
       contents: write
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7.0.1
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8.0.1
       with:
         path: artifacts
 
@@ -118,19 +181,40 @@ jobs:
         done
         ls -lh
 
+    - name: Generate checksums
+      # Consumed by internal/update's self-updater to verify a downloaded
+      # archive before installing it (see verifyChecksum in update.go).
+      run: |
+        cd artifacts
+        sha256sum *.tar.gz *.zip > SHA256SUMS
+        cat SHA256SUMS
+
     - name: Extract version from tag
       id: version
       run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+    - name: Determine release type
+      id: release_type
+      run: |
+        # Plain tags (v1.6.0) publish as a real release; tags carrying a
+        # semver pre-release identifier (v2.0.0-alpha, -beta, -rc1, ...)
+        # publish as a GitHub pre-release.
+        if [[ "${{ steps.version.outputs.VERSION }}" == *-* ]]; then
+          echo "prerelease=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "prerelease=false" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3.0.2
       with:
         name: Release ${{ steps.version.outputs.VERSION }}
         draft: false
-        prerelease: true
+        prerelease: ${{ steps.release_type.outputs.prerelease }}
         generate_release_notes: true
         files: |
           artifacts/*.tar.gz
           artifacts/*.zip
+          artifacts/SHA256SUMS
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

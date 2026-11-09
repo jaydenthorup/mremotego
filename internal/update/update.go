@@ -1,0 +1,503 @@
+// Package update implements self-update: checking GitHub Releases for a newer
+// version of MremoteGO, downloading the matching platform archive, and
+// replacing the currently running executable with it.
+package update
+
+import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// repoOwner/repoName identify the GitHub repository releases are checked against.
+const (
+	repoOwner = "janvdpol"
+	repoName  = "mremotego"
+)
+
+var releasesURL = fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=10", repoOwner, repoName)
+
+// checksumsAssetName is the release asset published alongside the platform
+// archives, listing each archive's SHA-256 in `sha256sum`-compatible format
+// (see the "Generate checksums" step in .github/workflows/build.yml).
+const checksumsAssetName = "SHA256SUMS"
+
+// Release describes a GitHub release that is newer than the running version
+// and has a downloadable archive for the current platform.
+type Release struct {
+	Version      string // e.g. "1.4.0" (no leading "v")
+	TagName      string // e.g. "v1.4.0"
+	HTMLURL      string
+	Notes        string
+	AssetURL     string
+	AssetName    string
+	ChecksumsURL string // browser_download_url for the release's SHA256SUMS file, or "" if absent
+}
+
+type ghRelease struct {
+	TagName    string    `json:"tag_name"`
+	HTMLURL    string    `json:"html_url"`
+	Body       string    `json:"body"`
+	Draft      bool      `json:"draft"`
+	Prerelease bool      `json:"prerelease"`
+	Assets     []ghAsset `json:"assets"`
+}
+
+type ghAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}
+
+// CheckLatest queries GitHub for the most recently published stable release
+// and returns it if newer than currentVersion. It reports ok=false (with no
+// error) when already up to date or when currentVersion is a local/dev build.
+//
+// The release list is queried rather than /releases/latest (which excludes
+// prereleases and drafts itself) because the plain GitHub API client used
+// here has no reliable way to tell in advance whether that endpoint has ever
+// had a qualifying release to return — walking the list and applying the
+// same draft/prerelease filter ourselves behaves identically once one
+// exists, and degrades gracefully (a normal "no update" result) rather than
+// erroring while it doesn't. See .github/workflows/build.yml's "Determine
+// release type" step for what makes a release stable vs. prerelease: plain
+// tags (v1.6.0) are stable, tags with a semver pre-release identifier
+// (v2.0.0-alpha) are not and are skipped here — self-update only ever
+// offers the latest stable release, never a prerelease (GitHub returns the
+// list newest-first).
+func CheckLatest(currentVersion string) (rel *Release, ok bool, err error) {
+	currentVersion = strings.TrimPrefix(strings.TrimSpace(currentVersion), "v")
+	if currentVersion == "" || currentVersion == "dev" {
+		return nil, false, nil
+	}
+
+	req, err := http.NewRequest(http.MethodGet, releasesURL, nil)
+	if err != nil {
+		return nil, false, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, false, fmt.Errorf("github API returned %s", resp.Status)
+	}
+
+	var releases []ghRelease
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return nil, false, err
+	}
+
+	for _, r := range releases {
+		if r.Draft || r.Prerelease {
+			continue
+		}
+
+		latestVersion := strings.TrimPrefix(r.TagName, "v")
+		if compareVersions(latestVersion, currentVersion) <= 0 {
+			return nil, false, nil // newest published release is not newer than what we have
+		}
+
+		assetName := assetNameFor(runtime.GOOS, runtime.GOARCH)
+		var assetURL, checksumsURL string
+		for _, a := range r.Assets {
+			switch a.Name {
+			case assetName:
+				assetURL = a.BrowserDownloadURL
+			case checksumsAssetName:
+				checksumsURL = a.BrowserDownloadURL
+			}
+		}
+		if assetURL == "" {
+			return nil, false, fmt.Errorf("release %s has no asset named %q for this platform", r.TagName, assetName)
+		}
+
+		return &Release{
+			Version:      latestVersion,
+			TagName:      r.TagName,
+			HTMLURL:      r.HTMLURL,
+			Notes:        r.Body,
+			AssetURL:     assetURL,
+			AssetName:    assetName,
+			ChecksumsURL: checksumsURL,
+		}, true, nil
+	}
+
+	return nil, false, nil
+}
+
+// assetNameFor returns the release asset name for goos/goarch, matching the
+// naming produced by .github/workflows/build.yml (upload-artifact name
+// "<goos>-<goarch>", archived as .zip on Windows and .tar.gz elsewhere).
+func assetNameFor(goos, goarch string) string {
+	ext := "tar.gz"
+	if goos == "windows" {
+		ext = "zip"
+	}
+	return fmt.Sprintf("%s-%s.%s", goos, goarch, ext)
+}
+
+// compareVersions compares dotted numeric version strings (e.g. "1.4.0").
+// Returns 1 if a > b, -1 if a < b, 0 if equal (non-numeric suffixes on the
+// final segment, e.g. "-alpha", are ignored).
+func compareVersions(a, b string) int {
+	as := strings.Split(a, ".")
+	bs := strings.Split(b, ".")
+	for i := 0; i < len(as) || i < len(bs); i++ {
+		var an, bn int
+		if i < len(as) {
+			an = leadingInt(as[i])
+		}
+		if i < len(bs) {
+			bn = leadingInt(bs[i])
+		}
+		if an != bn {
+			if an > bn {
+				return 1
+			}
+			return -1
+		}
+	}
+	return 0
+}
+
+// leadingInt parses the leading run of ASCII digits in s, returning 0 if
+// there is none (e.g. for a "0-alpha" style segment).
+func leadingInt(s string) int {
+	end := 0
+	for end < len(s) && s[end] >= '0' && s[end] <= '9' {
+		end++
+	}
+	n, _ := strconv.Atoi(s[:end])
+	return n
+}
+
+// Apply downloads rel's archive, verifies it against the release's published
+// SHA-256 checksum, extracts the executable, replaces the currently running
+// binary with it, and relaunches it. On success the caller should exit the
+// current process immediately — the app has already continued running as the
+// freshly spawned process.
+func Apply(rel *Release) error {
+	archivePath, err := download(rel.AssetURL, rel.AssetName)
+	if err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+	defer os.Remove(archivePath)
+
+	if err := verifyChecksum(archivePath, rel); err != nil {
+		return fmt.Errorf("update verification failed, refusing to install: %w", err)
+	}
+
+	newExePath, err := extractExecutable(archivePath)
+	if err != nil {
+		return fmt.Errorf("extract failed: %w", err)
+	}
+	defer os.RemoveAll(filepath.Dir(newExePath))
+
+	currentExe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("could not determine current executable path: %w", err)
+	}
+	if resolved, err := filepath.EvalSymlinks(currentExe); err == nil {
+		currentExe = resolved
+	}
+
+	if err := replaceExecutable(currentExe, newExePath); err != nil {
+		return fmt.Errorf("failed to install update: %w", err)
+	}
+
+	if err := relaunch(currentExe); err != nil {
+		return fmt.Errorf("update installed, but failed to relaunch automatically — please start MremoteGO again: %w", err)
+	}
+
+	return nil
+}
+
+// download fetches url to a temporary file (named after assetName, so its
+// extension is preserved for extractExecutable) and returns its path.
+func download(url, assetName string) (string, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("download failed: %s", resp.Status)
+	}
+
+	tmp, err := os.CreateTemp("", "mremotego-update-*"+filepath.Ext(assetName))
+	if err != nil {
+		return "", err
+	}
+	defer tmp.Close()
+
+	if _, err := io.Copy(tmp, resp.Body); err != nil {
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	return tmp.Name(), nil
+}
+
+// verifyChecksum fetches rel's SHA256SUMS asset and confirms archivePath's
+// SHA-256 matches the entry for rel.AssetName. It fails closed: a release
+// with no SHA256SUMS asset, no matching entry, or a mismatching hash is all
+// treated as verification failure.
+func verifyChecksum(archivePath string, rel *Release) error {
+	if rel.ChecksumsURL == "" {
+		return fmt.Errorf("release %s does not publish a %s file", rel.TagName, checksumsAssetName)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, rel.ChecksumsURL, nil)
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("could not fetch %s: %w", checksumsAssetName, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("could not fetch %s: %s", checksumsAssetName, resp.Status)
+	}
+
+	listing, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	expected, err := findChecksum(string(listing), rel.AssetName)
+	if err != nil {
+		return err
+	}
+
+	actual, err := sha256File(archivePath)
+	if err != nil {
+		return fmt.Errorf("could not hash downloaded file: %w", err)
+	}
+
+	if !strings.EqualFold(actual, expected) {
+		return fmt.Errorf("checksum mismatch for %s: expected %s, got %s", rel.AssetName, expected, actual)
+	}
+	return nil
+}
+
+// findChecksum looks up name's hex digest in listing, a `sha256sum`-format
+// file (one "<hex>  <filename>" pair per line; sha256sum also allows a
+// leading "*" before the filename for binary mode, which is stripped).
+func findChecksum(listing, name string) (string, error) {
+	for _, line := range strings.Split(listing, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		hash, file := fields[0], strings.TrimPrefix(fields[1], "*")
+		if file == name {
+			return hash, nil
+		}
+	}
+	return "", fmt.Errorf("no checksum entry found for %s", name)
+}
+
+// sha256File returns the lowercase hex-encoded SHA-256 digest of path's contents.
+func sha256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// extractExecutable pulls the single file out of archivePath (a .zip or
+// .tar.gz produced by the release workflow, each containing exactly one
+// executable at its root) into a fresh temp directory and returns its path.
+func extractExecutable(archivePath string) (string, error) {
+	if strings.HasSuffix(archivePath, ".zip") {
+		return extractFromZip(archivePath)
+	}
+	return extractFromTarGz(archivePath)
+}
+
+func extractFromZip(archivePath string) (string, error) {
+	r, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return "", err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return "", err
+		}
+		path, err := writeTempExecutable(rc, f.Name)
+		rc.Close()
+		return path, err
+	}
+	return "", fmt.Errorf("no file found in update archive")
+}
+
+func extractFromTarGz(archivePath string) (string, error) {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return "", err
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+		return writeTempExecutable(tr, hdr.Name)
+	}
+	return "", fmt.Errorf("no file found in update archive")
+}
+
+func writeTempExecutable(r io.Reader, name string) (string, error) {
+	dir, err := os.MkdirTemp("", "mremotego-update")
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, filepath.Base(name))
+	out, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	if err != nil {
+		return "", err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, r); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// relaunch starts exePath as a new detached process with the same arguments
+// the current process was given.
+func relaunch(exePath string) error {
+	cmd := exec.Command(exePath, os.Args[1:]...)
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	return cmd.Start()
+}
+
+// renameOrCopy moves src to dst. Plain os.Rename can't cross filesystem/volume
+// boundaries (common here, since src lives in the system temp directory), so
+// on failure this instead copies src into a temp file in dst's own directory
+// (guaranteed same filesystem) and renames that into place. Going through a
+// same-filesystem rename — rather than writing dst directly — matters when
+// dst may be the very executable currently running: overwriting its content
+// in place is unsafe, while rename/unlink-and-relink is not.
+func renameOrCopy(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(dst), ".mremotego-update-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath) // no-op once successfully renamed away
+
+	in, err := os.Open(src)
+	if err != nil {
+		tmp.Close()
+		return err
+	}
+	_, copyErr := io.Copy(tmp, in)
+	in.Close()
+	closeErr := tmp.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if err := os.Chmod(tmpPath, 0755); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, dst); err != nil {
+		return err
+	}
+
+	_ = os.Remove(src)
+	return nil
+}
+
+// CleanupOnStartup removes a "<exe>.old" leftover from a previous self-update
+// (see the Windows replaceExecutable), retrying for up to ~30s since the old
+// process — which spawned this one and then exited — may take a little while
+// to fully tear down (Fyne's GL context teardown in particular) and release
+// its handle on that file. Callers should invoke this in a goroutine: it's
+// meant to finish cleanup shortly after startup, not block it.
+func CleanupOnStartup() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+
+	oldPath := exe + ".old"
+	if _, err := os.Stat(oldPath); err != nil {
+		return // nothing to clean up
+	}
+
+	for i := 0; i < 60; i++ {
+		if err := os.Remove(oldPath); err == nil {
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
